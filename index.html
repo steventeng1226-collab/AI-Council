@@ -178,7 +178,7 @@ mark{background:#fde68a;color:#111;padding:0 1px}
 <script>
 
 'use strict';
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 const FENCE = '```';
 
 /* ===================== 基本定義 ===================== */
@@ -195,6 +195,7 @@ const MODES = {
   compare: { name: '三方比較', desc: '三家各自獨立回答，並排查看（3 次）' },
   quick:   { name: '快速驗證', desc: '三家回答＋裁判總結（4 次）' },
   single:  { name: '單一 AI', desc: '只問一家（1 次），日常小問題用；需要時可以在同一個主題改用互參整合再驗證' },
+  transcript: { name: '📝 逐字稿→一頁圖', desc: '貼上逐字稿（例如 Gemini 筆記本）→ 整理成整理稿（可選另外兩家核對數字）→ 生圖提示貼到 ChatGPT → Claude 對照逐字稿檢查圖檔，通過才算完成' },
   deep:    { name: '深度互審（舊版）', desc: '舊版模式', hidden: true }
 };
 const EXEC = { auto: '自動（API）', semi: '半自動（貼上）' };
@@ -208,7 +209,8 @@ const STATUS = {
   disputed:       ['⚖️ 意見分歧', '#7c3aed'],
   needs_decision: ['❓ 待你判定', '#b45309'],
   error:          ['❌ 中斷，可續跑', '#b91c1c'],
-  done:           ['✅ 完成', '#0a7d4f']
+  done:           ['✅ 完成', '#0a7d4f'],
+  img_pending:    ['🖼 待 Claude 檢查圖檔', '#7c3aed']
 };
 const VERD = {
   PASS:          ['通過', '#0a7d4f'],
@@ -219,7 +221,7 @@ const VERD = {
 };
 const AUX_TYPES = ['note', 'imgprompt', 'imgcheck'];
 const ERR_TYPE = { text: '文字', number: '數字', missing: '遺漏', extra: '多餘', layout: '版面' };
-const STEP_LABEL = { answer: '① 各自分析', refine: '② 審查另外兩家並修正', integrate: '③ 驗證報告與最終版', draft: '主寫第 1 版', review: '審查', revise: '依審查意見修正', arbitrate: '第三方複審', judge: '裁判總結', cross: '互審', imgcheck: '圖檔校對' };
+const STEP_LABEL = { answer: '① 各自分析', refine: '② 審查另外兩家並修正', integrate: '③ 驗證報告與最終版', draft: '主寫第 1 版', review: '審查', revise: '依審查意見修正', arbitrate: '第三方複審', judge: '裁判總結', cross: '互審', imgcheck: '圖檔校對', tclean: '整理逐字稿', tverify: '核對整理稿', tfix: '依核對意見修正整理稿' };
 const BG_FIELDS = [['openai', 'ChatGPT 對話的交接摘要'], ['anthropic', 'Claude 對話的交接摘要'], ['gemini', 'Gemini 對話的交接摘要'], ['user', '你的補充說明']];
 
 /* ===================== 提示詞 ===================== */
@@ -332,6 +334,35 @@ ${FENCE}
 ok_count 是核對正確的項目數。verdict 只能是 PASS 或 REVISE：只要 errors 或 unreadable 不是空的，就不能 PASS。type 只能是 text、number、missing、extra、layout。
 fix_prompt 要逐條寫明位置與正確內容，並要求 ChatGPT「其餘文字、數據、圖表及排版全部維持不變」；沒有錯誤時留空字串。`;
 
+const TCLEAN_SYS = `你負責把會議或談話的「逐字稿」整理成「整理稿」，之後要做成一頁資訊圖。用繁體中文。
+規則：
+1. 去掉口語贅字、重複、離題閒聊；依議題分段。
+2. 數字、單位、百分比、日期、人名、料號、金額一律照逐字稿原文，不可四捨五入、不可自行推算或換算。
+3. 逐字稿是語音辨識產生的，常把數字、人名、專有名詞聽錯。看起來可疑的地方，不要自己改正，列在「❓待確認」，寫明逐字稿原文與可能的正確寫法。
+4. 不可加入逐字稿沒有的內容；不確定是誰說的，就不要寫發言人。
+必須依序使用以下標題：
+## 一句話結論
+## 重點（依議題分段）
+## 關鍵數字（表格：項目｜數字｜單位｜逐字稿原文）
+## 決議與待辦（誰、做什麼、何時；逐字稿沒提到的寫「未提及」）
+## ❓待確認`;
+
+const TVERIFY_SYS = `你是核對員。對照【逐字稿】檢查【整理稿】，用繁體中文。
+檢查：數字、單位、百分比、日期、人名、料號是否和逐字稿一致；有沒有漏掉重要內容；有沒有逐字稿沒有的內容；決議、待辦、發言人有沒有寫錯；語音辨識可能聽錯、但整理稿當成確定事實的地方。
+只輸出一個 JSON 區塊：
+${FENCE}json
+{"verdict":"PASS","summary":"一句話總評","issues":[{"id":1,"location":"整理稿哪一段","problem":"問題","original":"逐字稿原文","suggestion":"建議改法"}]}
+${FENCE}
+verdict 只能是 PASS 或 REVISE；issues 不是空的就不能 PASS。`;
+
+const TFIX_SYS = `你是整理稿的作者，現在依核對意見修正。用繁體中文。
+每一條意見都以【逐字稿】為準判斷：核對者對才改，不對就不改並說明原因；無法判斷的列入「❓待確認」。
+必須依序輸出兩個標題：
+## 核對意見處理
+（逐條：採納／不採納／列待確認，附一句理由）
+## ⭐ 最終版
+（修正後的完整整理稿，照原本五個標題：一句話結論、重點、關鍵數字、決議與待辦、❓待確認）`;
+
 const HANDOFF_PROMPT = `請為這個對話寫一份「交接摘要」，我要轉到另一個工具繼續討論。用繁體中文，照以下格式：
 1. 主題與核心問題（要回答誰、回答什麼）
 2. 已提供的資料清單（截圖、逐字稿、報表各是什麼內容）
@@ -368,7 +399,7 @@ const DEF = {
   judgeRot: 0,
   imgAI: 'anthropic',
   sync: { url: '', token: '', auto: true, last: 0, err: '' },
-  last: { mode: 'mutual', author: 'openai', reviewer: 'anthropic', arbiter: 'gemini', rounds: 3, judge: 'rotate', lead: 'anthropic', template: '', single: 'anthropic' }
+  last: { mode: 'mutual', author: 'openai', reviewer: 'anthropic', arbiter: 'gemini', rounds: 3, judge: 'rotate', lead: 'anthropic', template: '', single: 'anthropic', tlead: 'anthropic', tcheck: false, tsrc: 'Gemini 筆記本' }
 };
 function deepMerge(a, b) {
   for (const k in b) {
@@ -705,7 +736,7 @@ function splitReport(text) {
   if (!m) return { report: '', final: t };
   return { report: t.slice(0, m.index).trim(), final: t.slice(m.index + m[0].length).trim() };
 }
-const content = st => (st.type === 'revise' ? st.revised : (st.type === 'integrate' || st.type === 'judge') ? splitReport(st.text).final : st.text);
+const content = st => (st.type === 'revise' ? st.revised : (st.type === 'integrate' || st.type === 'judge' || st.type === 'tfix') ? splitReport(st.text).final : st.text);
 function lastOk(s, type, beforeIdx) { const a = s.steps.slice(0, beforeIdx ?? s.steps.length).filter(x => x.status === 'ok' && x.type === type); return a[a.length - 1]; }
 const turnNo = t => topicOf(t).turns.indexOf(t) + 1;
 
@@ -787,6 +818,17 @@ function nextMulti(s) {
   const has = (type, p) => ok.some(x => x.type === type && (!p || x.provider === p));
   const cnt = (type, p) => ok.filter(x => x.type === type && (!p || x.provider === p)).length;
   if (s.mode === 'single') { const p = s.config.single; return has('answer', p) ? { type: 'end', status: 'done' } : { type: 'answers', list: [p] }; }
+  if (s.mode === 'transcript') {
+    const lead = s.config.lead || 'anthropic';
+    if (!has('tclean')) return { type: 'tclean' };
+    if (s.config.tcheck) {
+      const mv = PROVS.filter(p => p !== lead && !has('tverify', p));
+      if (mv.length) return { type: 'tverify', list: mv };
+      const bad = ok.filter(x => x.type === 'tverify').some(x => x.verdict !== 'PASS' || (x.data?.issues || []).length);
+      if (bad && !has('tfix')) return { type: 'tfix' };
+    }
+    return { type: 'end', status: imgPassed(s) ? 'done' : 'img_pending' };
+  }
   const miss = PROVS.filter(p => !has('answer', p));
   if (miss.length) return { type: 'answers', list: miss };
   if (s.mode === 'compare') return { type: 'end', status: 'done' };
@@ -861,6 +903,41 @@ function judgePrompt(s) {
   PROVS.forEach(p => { u += `\n【${N(p)} 的回答】\n${ansOf(s, p)}\n`; });
   if (s.mode === 'deep') PROVS.forEach(p => { const c = stepOf(s, 'cross', p); if (c) u += `\n【${N(p)} 的互審意見】\n${c.text}\n`; });
   return u + '\n請依五個標題輸出最終報告。';
+}
+
+/* ---------- 逐字稿 → 一頁圖 ---------- */
+const tMat = s => topicOf(s).materials.find(m => m.id === s.transcriptId) || null;
+const imgAIOf = s => (s.mode === 'transcript' ? 'anthropic' : S.imgAI);
+const imgPassed = s => s.steps.some(x => x.type === 'imgcheck' && x.status === 'ok' && (x.verdict === 'PASS' || x.accepted));
+function tBase(s, p, withT) {
+  const tp = topicOf(s), m = tMat(s);
+  let u = `【主題】${tp.title}`;
+  if (s.exec !== 'semi') BG_FIELDS.forEach(([k, label]) => { if ((tp.bg[k] || '').trim()) u += `\n\n【主題背景：${label}】\n${tp.bg[k].trim()}`; });
+  if (s.tfocus) u += `\n\n【這份整理的用途／重點】\n${s.tfocus}`;
+  if (withT) u += `\n\n【逐字稿】${m && m.label ? `（來源：${m.label}）` : ''}\n${m ? m.text : '（找不到逐字稿，可能已被刪除）'}`;
+  return u + notesOf(s) + tplText(s);
+}
+function fmtTIssues(a) { if (!a || !a.length) return '（無）'; return a.map(i => `#${i.id} ${i.location ? `[${i.location}] ` : ''}${i.problem || ''}${i.original ? `\n   逐字稿原文：${i.original}` : ''}${i.suggestion ? `\n   建議：${i.suggestion}` : ''}`).join('\n'); }
+const postTverify = st => {
+  st.data = parseJSON(st.text);
+  const d = st.data, v = String(d?.verdict || '').toUpperCase();
+  st.verdict = !d ? 'UNKNOWN' : (d.issues || []).length ? 'REVISE' : v === 'PASS' ? 'PASS' : 'REVISE';
+};
+/* 半自動：逐字稿已經在這一步貼給該 AI，就標記為已送出，之後不會重送 */
+function markTSent(s, p) {
+  if (s.exec !== 'semi') return;
+  const tp = topicOf(s), i = tp.materials.findIndex(m => m.id === s.transcriptId);
+  if (i < 0) return;
+  tp.sent = tp.sent || {};
+  if ((tp.sent[p] || 0) === i) tp.sent[p] = i + 1;
+}
+function tcInfo() {
+  const n = (C.text || '').length; if (!n) return '';
+  const lead = C.tlead || 'anthropic';
+  const tin = Math.round(n * 1.1), est = calcCost(lead, tin, Math.round(n * 0.35));
+  let c = est;
+  if (C.tcheck && c != null) PROVS.filter(p => p !== lead).forEach(p => { const x = calcCost(p, tin * 1.3, 800); c = x == null ? null : c + x; });
+  return `逐字稿 ${n.toLocaleString()} 字${c != null ? `，自動模式整理約 ${money(c)}` : ''}${n > 60000 ? '　⚠️ 很長，建議改用半自動，或分段貼上' : ''}`;
 }
 
 /* ---------- 半自動：等使用者把網頁回覆貼回來 ---------- */
@@ -957,12 +1034,37 @@ async function exec(s, a) {
     case 'judge':
       setCur(`${N(c.judge)} 裁判總結`);
       return step(s, c.judge, JUDGE_SYS, judgePrompt(s), { type: 'judge' });
+    case 'tclean': {
+      const lead = c.lead || 'anthropic';
+      setCur(`📝 ${N(lead)} 整理逐字稿`);
+      await step(s, lead, TCLEAN_SYS, tBase(s, lead, true) + '\n\n請依規定的五個標題，整理成整理稿。', { type: 'tclean', images: [] });
+      return markTSent(s, lead);
+    }
+    case 'tverify': {
+      const lead = c.lead || 'anthropic', cl = lastOf(s, 'tclean');
+      setCur(`🔎 核對整理稿：${a.list.map(N).join('、')}`);
+      return Promise.all(a.list.map(p => step(s, p, TVERIFY_SYS, tBase(s, p, true) + `\n\n【整理稿（${N(lead)} 整理）】\n${cl ? cl.text : ''}\n\n請對照逐字稿逐項核對，只輸出 JSON。`, { type: 'tverify', images: [], post: postTverify }).then(() => markTSent(s, p))));
+    }
+    case 'tfix': {
+      const lead = c.lead || 'anthropic', cl = lastOf(s, 'tclean');
+      setCur(`✏️ ${N(lead)} 依核對意見修正整理稿`);
+      let u = tBase(s, lead, s.exec !== 'semi') + (s.exec === 'semi' ? '' : `\n\n【你的整理稿】\n${cl ? cl.text : ''}`);
+      okSteps(s).filter(x => x.type === 'tverify').forEach(v => { u += `\n\n【${N(v.provider)} 的核對意見】\n${v.data ? `總評：${v.data.summary || ''}\n${fmtTIssues(v.data.issues)}` : v.text}`; });
+      return step(s, lead, TFIX_SYS, u + '\n\n請依規定的兩個標題輸出。', { type: 'tfix', images: [] });
+    }
   }
 }
 function finalize(s) {
   if (s.finalManual) return;
   if (s.mode === 'relay') { const d = curDraft(s); if (d) { s.final = content(d); s.finalStepId = d.id; } }
   else if (s.mode === 'single') { const a = lastOf(s, 'answer'); if (a) { s.final = a.text; s.report = ''; s.finalStepId = a.id; } }
+  else if (s.mode === 'transcript') {
+    const f = lastOf(s, 'tfix'), cl = lastOf(s, 'tclean');
+    const vs = okSteps(s).filter(x => x.type === 'tverify');
+    const vrep = vs.length ? '## 🔎 核對結果\n' + vs.map(v => `- ${N(v.provider)}：${v.verdict === 'PASS' ? '✅ 沒有發現問題' : v.data ? `發現 ${(v.data.issues || []).length} 處問題` : '格式無法解析'}${v.data?.summary ? `（${v.data.summary}）` : ''}`).join('\n') : '';
+    if (f) { const r = splitReport(f.text); s.final = r.final; s.report = [vrep, r.report].filter(Boolean).join('\n\n'); s.finalStepId = f.id; }
+    else if (cl) { s.final = cl.text; s.report = vrep; s.finalStepId = cl.id; }
+  }
   else { const j = okSteps(s).filter(x => x.type === 'judge' || x.type === 'integrate').pop(); if (j) { const r = splitReport(j.text); s.final = r.final; s.report = r.report; s.finalStepId = j.id; } }
 }
 
@@ -984,7 +1086,7 @@ function keysOK(list) {
   if (miss.length) { toast(`請先到設定填好 ${miss.map(N).join('、')} 的 Key 與模型`); return false; }
   return true;
 }
-const needProvs = (c, mode) => (mode === 'relay' ? [c.author, c.reviewer, c.arbiter].filter(Boolean) : mode === 'single' ? [c.single] : PROVS);
+const needProvs = (c, mode) => (mode === 'relay' ? [c.author, c.reviewer, c.arbiter].filter(Boolean) : mode === 'single' ? [c.single] : mode === 'transcript' ? (c.tcheck ? PROVS : [c.lead || 'anthropic']) : PROVS);
 
 async function run(s) {
   if (RUNNING.has(s.id) || AUX.has(s.id)) return;
@@ -1012,9 +1114,9 @@ async function run(s) {
     if (!(V.view === 'topic' && V.tid === tp.id)) toast(`「${tp.title}」第 ${turnNo(s)} 問：${(STATUS[s.status] || [''])[0]}`);
   }
 }
-async function runAux(obj, label, fn, semi) {
+async function runAux(obj, label, fn, semi, prov) {
   if (RUNNING.has(obj.id) || AUX.has(obj.id)) return;
-  if (!semi) { if (!keysOK([S.imgAI]) || !budgetOK()) return; }
+  if (!semi) { if (!keysOK([prov || S.imgAI]) || !budgetOK()) return; }
   AUX.add(obj.id); obj.auxCurrent = label; refresh(); if (!semi) lockWake();
   try { await fn(); }
   finally { AUX.delete(obj.id); obj.auxCurrent = null; if (obj.pending) obj.pending = []; await save(obj); releaseWake(); refresh(); }
@@ -1022,15 +1124,17 @@ async function runAux(obj, label, fn, semi) {
 
 /* ---------- 圖檔：提示詞與校對 ---------- */
 const imgChecks = s => s.steps.filter(x => x.type === 'imgcheck');
+const T_IMG_NOTE = '\n\n（注意：「❓待確認」區的內容不要放進圖裡；「關鍵數字」表的「逐字稿原文」欄不用放進圖。）';
 const imgPrompt = s => lastOk(s, 'imgprompt');
 async function genImgPrompt(id) {
   const s = T(id);
+  const body = s.mode === 'transcript' ? s.final + T_IMG_NOTE : s.final;
   if (s.exec === 'semi') {
-    s.steps.push({ id: uid(), type: 'imgprompt', provider: 'openai', text: IMG_TEMPLATE(s.final, s.imgPages || 1), status: 'ok', at: Date.now(), template: true, manual: true });
+    s.steps.push({ id: uid(), type: 'imgprompt', provider: 'openai', text: IMG_TEMPLATE(body, s.imgPages || 1), status: 'ok', at: Date.now(), template: true, manual: true });
     await save(s); refresh(); return;
   }
   runAux(s, `${N(S.imgAI)} 撰寫生圖提示詞…`, () =>
-    step(s, S.imgAI, IMGPROMPT_SYS, `【頁數】${pagesRule(s.imgPages || 1)}\n\n【最終版內容】\n${s.final}\n\n請撰寫生圖指令。`, { type: 'imgprompt', images: [] }));
+    step(s, S.imgAI, IMGPROMPT_SYS, `【頁數】${pagesRule(s.imgPages || 1)}\n\n【最終版內容】\n${body}\n\n請撰寫生圖指令。`, { type: 'imgprompt', images: [] }));
 }
 let PENDING_IMG = null;
 async function setPendingImg(tid, file) {
@@ -1043,21 +1147,30 @@ function checkImg(id) {
   const prevOk = imgChecks(s).filter(x => x.status === 'ok').pop();
   const ip = imgPrompt(s);
   const tp = topicOf(s);
-  const src = [s.question ? `問題：${s.question}` : '', ...tp.materials.map((m, i) => m.text ? `(${i + 1}) ${m.text}` : ''), tp.digest ? `前情摘要：${tp.digest.text}` : ''].filter(Boolean).join('\n').slice(0, 12000);
-  let u = `【原始資料】\n${src || '（沒有文字資料，原始資料是圖片或在網頁對話中）'}\n\n【最終版內容】\n${s.final}`;
+  const tm = s.mode === 'transcript' ? tMat(s) : null;
+  const src = tm ? `（以下是原逐字稿）\n${tm.text.slice(0, 60000)}` : [s.question ? `問題：${s.question}` : '', ...tp.materials.map((m, i) => m.text ? `(${i + 1}) ${m.text}` : ''), tp.digest ? `前情摘要：${tp.digest.text}` : ''].filter(Boolean).join('\n').slice(0, 12000);
+  let u = `【原始資料】\n${src || '（沒有文字資料，原始資料是圖片或在網頁對話中）'}\n\n【最終版內容】${tm ? '（整理稿）' : ''}\n${s.final}`;
+  if (tm) u += '\n\n（補充規則：整理稿「❓待確認」的項目本來就不該出現在圖上；若圖上把它當成確定的數字或事實，列入 errors。圖上的數字也要對照原逐字稿。）';
   if (ip && !ip.template) u += `\n\n【生圖指令】\n${ip.text}`;
   if (prevOk?.data) u += `\n\n【上一張的錯誤清單】\n${fmtImgErrs(prevOk.data.errors)}`;
   u += `\n\n${s.exec === 'semi' ? '我接著貼上的圖' : '附圖'}是第 ${n} 張，請逐字逐數字校對，只輸出 JSON。`;
-  const semi = s.exec === 'semi';
-  runAux(s, semi ? `✋ 等你把 ${N(S.imgAI)} 的校對結果貼回來（第 ${n} 張）` : `${N(S.imgAI)} 校對第 ${n} 張圖…`, async () => {
-    await step(s, S.imgAI, IMGCHECK_SYS, u, { type: 'imgcheck', images: [img], label: `圖檔校對第 ${n} 張`, extra: { image: img, num: n }, post: st => {
+  const semi = s.exec === 'semi', ck = imgAIOf(s);
+  runAux(s, semi ? `✋ 等你把 ${N(ck)} 的校對結果貼回來（第 ${n} 張）` : `${N(ck)} 校對第 ${n} 張圖…`, async () => {
+    await step(s, ck, IMGCHECK_SYS, u, { type: 'imgcheck', images: [img], label: `圖檔校對第 ${n} 張`, extra: { image: img, num: n }, post: st => {
       st.data = parseJSON(st.text);
       const d = st.data, v = String(d?.verdict || '').toUpperCase();
       st.verdict = !d ? 'UNKNOWN' : ((d.errors || []).length || (d.unreadable || []).length) ? 'REVISE' : (d.uncertain || []).length ? 'CHECK' : v === 'PASS' ? 'PASS' : v === 'REVISE' ? 'REVISE' : 'UNKNOWN';
     } });
     const last = s.steps[s.steps.length - 1];
     if (last && last.type === 'imgcheck' && last.status === 'ok') PENDING_IMG = null;
-  }, semi);
+    if (s.mode === 'transcript' && !RUNNING.has(s.id) && ['done', 'img_pending'].includes(s.status)) s.status = imgPassed(s) ? 'done' : 'img_pending';
+  }, semi, ck);
+}
+async function acceptImg(tid, sid) {
+  const s = T(tid), st = s.steps.find(x => x.id === sid); if (!st) return;
+  if (!confirm('待確認的項目你都已經確認過，這張圖可以使用？')) return;
+  st.accepted = true; if (s.status === 'img_pending') s.status = 'done';
+  await save(s); refresh(); toast('已標記完成');
 }
 function isSmallFix(d) {
   const e = d?.errors || [];
@@ -1257,6 +1370,9 @@ function stepTitle(s, st) {
     case 'judge': return `裁判總結 · ${n}`;
     case 'imgprompt': return `生圖提示詞 · ${st.template ? '範本' : n}`;
     case 'imgcheck': return `圖檔校對第 ${st.num || '?'} 張 · ${n}`;
+    case 'tclean': return `📝 整理稿 · ${n}`;
+    case 'tverify': return `🔎 ${n} 核對整理稿`;
+    case 'tfix': return `✏️ 依核對意見修正 · ${n}`;
     case 'note': return '📎 你的補充／指示';
     case 'force': return '🔁 你要求再審一輪';
     default: return '系統';
@@ -1295,11 +1411,17 @@ function stepCard(s, st, opts = {}) {
     if (st.data) body = `<p>${esc(st.data.summary || '')}</p><ul class="issues">` + (st.data.rulings || []).map(r => `<li>${badge(r.winner === 'reviewer' ? '審查者有理' : '主寫者有理', r.winner === 'reviewer' ? '#b45309' : '#0a7d4f')} <b>#${esc(r.id)}</b> ${esc(r.reason)}</li>`).join('') + '</ul>';
     else body = `<div class="warn">複審結果無法解析，原文如下。</div><div class="md">${md(st.text)}</div>`;
   }
+  else if (st.type === 'tverify') {
+    extra = badge(st.verdict === 'PASS' ? '沒有問題' : st.verdict === 'REVISE' ? `${(st.data?.issues || []).length} 處問題` : '無法解析', st.verdict === 'PASS' ? '#0a7d4f' : st.verdict === 'REVISE' ? '#b45309' : '#b91c1c');
+    if (st.data) body = `<p><b>總評：</b>${esc(st.data.summary || '')}</p>` + ((st.data.issues || []).length ? '<ul class="issues">' + st.data.issues.map(i => `<li><b>#${esc(i.id)}</b> ${i.location ? `[${esc(i.location)}] ` : ''}${esc(i.problem)}${i.original ? `<br><span class="meta">逐字稿原文：${esc(i.original)}</span>` : ''}${i.suggestion ? `<br><span class="meta">建議：${esc(i.suggestion)}</span>` : ''}</li>`).join('') + '</ul>' : '');
+    else body = `<div class="warn">核對結果格式無法解析，原文如下（仍會交給整理者參考）。</div><div class="md">${md(st.text)}</div>`;
+  }
   else if (st.type === 'note') body = `<p>${esc(st.text).replace(/\n/g, '<br>')}</p>`;
   else if (st.type === 'force') body = '<p>已追加一輪審查。</p>';
   else body = `<div class="md">${md(st.text)}</div>`;
-  const canRerun = ['draft', 'review', 'revise', 'arbitrate', 'answer', 'refine', 'cross', 'judge', 'integrate'].includes(st.type) && !RUNNING.has(s.id) && !AUX.has(s.id);
-  if (st.status === 'ok' && (['draft', 'revise', 'answer', 'refine', 'judge', 'integrate'].includes(st.type) || canRerun)) body += `<div class="btns">${['draft', 'revise', 'answer', 'refine', 'judge', 'integrate'].includes(st.type) ? `<button onclick="pickFinal('${s.id}','${st.id}')">${s.finalStepId === st.id ? '⭐ 目前的最終版' : '☆ 選為最終版'}</button>` : ''}${canRerun ? `<button onclick="rerunStep('${s.id}','${st.id}')">🔄 重跑這一步</button>` : ''}</div>`;
+  const canRerun = ['draft', 'review', 'revise', 'arbitrate', 'answer', 'refine', 'cross', 'judge', 'integrate', 'tclean', 'tverify', 'tfix'].includes(st.type) && !RUNNING.has(s.id) && !AUX.has(s.id);
+  const pickable = ['draft', 'revise', 'answer', 'refine', 'judge', 'integrate', 'tclean', 'tfix'];
+  if (st.status === 'ok' && (pickable.includes(st.type) || canRerun)) body += `<div class="btns">${pickable.includes(st.type) ? `<button onclick="pickFinal('${s.id}','${st.id}')">${s.finalStepId === st.id ? '⭐ 目前的最終版' : '☆ 選為最終版'}</button>` : ''}${canRerun ? `<button onclick="rerunStep('${s.id}','${st.id}')">🔄 重跑這一步</button>` : ''}</div>`;
   const open = OPEN[st.id] ?? !!opts.defOpen;
   return `<details class="step" style="--c:${color}" ${open ? 'open' : ''} ontoggle="OPEN['${st.id}']=this.open"><summary>${esc(title)} ${extra}</summary><div class="body">${stepMeta(st)}${body}</div></details>`;
 }
@@ -1365,7 +1487,9 @@ function imgSection(s) {
   else h += `<div class="btns"><button class="primary" ${busy ? 'disabled' : ''} onclick="genImgPrompt('${s.id}')">🎨 產生生圖提示詞</button></div><div class="hint">${s.exec === 'semi' ? '用固定範本把最終版包成生圖指令（不需呼叫 AI）。' : `由 ${N(S.imgAI)} 根據最終版，逐字列出圖上要出現的文字與數字。`}</div>`;
   const ipErr = s.steps.filter(x => x.type === 'imgprompt' && x.status === 'error').pop();
   if (ipErr && !ip) h += `<div class="warn">${esc(ipErr.error)}</div>`;
-  h += `<div class="lbl">② 圖檔校對（${N(S.imgAI)} 對照原始資料與最終版，逐項比對）</div>`;
+  const ck = imgAIOf(s);
+  h += `<div class="lbl">② 圖檔校對（${N(ck)} 對照${s.mode === 'transcript' ? '原逐字稿與整理稿' : '原始資料與最終版'}，逐項比對）</div>`;
+  if (s.mode === 'transcript') h += imgPassed(s) ? '<div class="good">✅ Claude 已檢查通過，這一問完成。</div>' : '<div class="warn">🖼 這一步是固定步驟：把 ChatGPT 做好的圖貼上，<b>Claude 檢查通過</b>後，這一問才會標記「完成」。</div>';
   const oks = imgChecks(s).filter(x => x.status === 'ok');
   imgChecks(s).forEach(st => {
     if (st.status === 'error') { h += `<div class="warn">第 ${st.num || '?'} 張校對失敗：${esc(st.error)}</div>`; return; }
@@ -1381,7 +1505,7 @@ function imgSection(s) {
       if (nU) b += `<div class="lbl">？ 待確認</div><ul class="issues">${d.uncertain.map(x => `<li><b>${esc(x.location)}</b>：${esc(x.content)}<br><span class="meta">${esc(x.reason)}</span></li>`).join('')}</ul>`;
       if (nR) b += `<div class="lbl">◌ 無法辨識</div><ul class="issues">${d.unreadable.map(x => `<li><b>${esc(x.location)}</b>：${esc(x.reason)}</li>`).join('')}</ul>`;
       if (st.verdict === 'PASS') b += '<div class="good">✅ 這張圖校對通過，可以使用。</div>';
-      else if (st.verdict === 'CHECK') b += '<div class="warn">沒有找到錯誤，但有待確認的項目（多半是最終版和原始資料不一致）。請先確認這些地方，再決定是否使用。</div>';
+      else if (st.verdict === 'CHECK') b += `<div class="warn">沒有找到錯誤，但有待確認的項目（多半是最終版和原始資料不一致）。請先確認這些地方，再決定是否使用。</div>${s.mode === 'transcript' ? (st.accepted ? '<div class="good">✔ 你已確認，這張圖可以使用。</div>' : `<div class="btns"><button onclick="acceptImg('${s.id}','${st.id}')">✔ 待確認的都確認過了，標記完成</button></div>`) : ''}`;
       else if (nR && !nE) b += '<div class="warn">有看不清楚的地方，不能判定通過。請要 ChatGPT 把這些文字放大、加粗後再生一次。</div>';
       else if (isSmallFix(d)) b += `<div class="warn">💡 只剩 ${d.errors.length} 處文字／數字小錯。<b>建議不要再整張重生</b>：把這張圖和錯誤清單交給 Claude 對話做局部修補，避免 ChatGPT 改出新的錯誤。</div>`;
       if (d.fix_prompt && st.verdict !== 'PASS') b += `<div class="lbl">給 ChatGPT 的修正指令</div><div class="copybox">${esc(d.fix_prompt)}</div><div class="btns"><button class="primary" onclick="${copyOpenGpt(`T('${s.id}').steps.find(x=>x.id==='${st.id}').data.fix_prompt`, '已複製修正指令，到 ChatGPT 貼上')}">📋 複製修正指令${gptUrl ? '並開啟 ChatGPT' : ''}</button><button onclick="copyText(fmtImgErrs(T('${s.id}').steps.find(x=>x.id==='${st.id}').data.errors),'已複製錯誤清單')">📋 複製錯誤清單</button></div>`;
@@ -1477,7 +1601,9 @@ function turnBlock(s, isLast) {
   const cfgLine = s.mode === 'relay' ? `主寫 ${pv(c.author)} → 審查 ${pv(c.reviewer)}　複審 ${c.arbiter ? pv(c.arbiter) : '不啟用'}　最多 ${c.rounds} 輪`
     : s.mode === 'single' ? `只問 ${pv(c.single)}`
     : s.mode === 'mutual' ? `三家各自分析 → 互相審查修正 → 主整合 ${pv(c.lead)}`
-    : s.mode === 'compare' ? '三家獨立回答' : `裁判 ${pv(c.judge)}`;
+    : s.mode === 'compare' ? '三家獨立回答'
+    : s.mode === 'transcript' ? `整理 ${pv(c.lead || 'anthropic')}　${c.tcheck ? `${PROVS.filter(p => p !== (c.lead || 'anthropic')).map(pv).join('、')} 核對` : '不做三方核對'}　圖檔由 ${pv('anthropic')} 檢查`
+    : `裁判 ${pv(c.judge)}`;
   const t = totals(s);
   const open = OPEN['turn_' + s.id] ?? isLast;
   let h = `<details class="turn" id="turn_${s.id}" ${open ? 'open' : ''} ontoggle="OPEN['turn_${s.id}']=this.open">
@@ -1490,7 +1616,7 @@ function turnBlock(s, isLast) {
   if (cur) h += `<div class="running">${s.exec === 'semi' ? '' : '<div class="spin"></div>'}<div>${esc(cur)}${s.exec === 'semi' ? '' : '<div class="meta">畫面會保持亮著；切到背景可能中斷，回來按「續跑」即可。</div>'}</div></div>`;
   h += pendingCards(s);
   h += waitHint(s) + finalCard(s) + imgSection(s);
-  h += `<details class="plain" ${OPEN['proc_' + s.id] ?? !s.final ? 'open' : ''} ontoggle="OPEN['proc_${s.id}']=this.open"><summary>🧾 過程紀錄</summary>${s.mode === 'relay' ? relayProcess(s) : s.mode === 'single' ? s.steps.filter(x => !AUX_TYPES.includes(x.type)).map(st => stepCard(s, st, { defOpen: true })).join('') : multiProcess(s)}</details>`;
+  h += `<details class="plain" ${OPEN['proc_' + s.id] ?? !s.final ? 'open' : ''} ontoggle="OPEN['proc_${s.id}']=this.open"><summary>🧾 過程紀錄</summary>${s.mode === 'relay' ? relayProcess(s) : (s.mode === 'single' || s.mode === 'transcript') ? s.steps.filter(x => !AUX_TYPES.includes(x.type)).map(st => stepCard(s, st, { defOpen: true })).join('') : multiProcess(s)}</details>`;
   return h + '</div></details>';
 }
 
@@ -1506,6 +1632,10 @@ function composerCfg() {
       ${C.author === C.reviewer ? '<div class="hint"><b style="color:#b91c1c">⚠️ 主寫和審查不能是同一家</b></div>' : ''}`;
   if (m === 'mutual') return `<div class="lbl">③ 主整合者</div>${provSelect('lead')}`;
   if (m === 'single') return `<div class="lbl">問哪一家</div>${provSelect('single')}`;
+  if (m === 'transcript') return `<div class="row"><div><div class="lbl">誰整理逐字稿</div>${provSelect('tlead')}</div><div><div class="lbl">逐字稿來源</div><input value="${esc(C.tsrc || '')}" placeholder="例如 Gemini 筆記本" oninput="C.tsrc=this.value"></div></div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" style="width:auto" ${C.tcheck ? 'checked' : ''} onchange="C.tcheck=this.checked;refresh()"> 三方核對：另外兩家對照逐字稿檢查數字與人名（重要會議用，自動模式多 2～3 次呼叫）</label>
+      <div class="lbl">這份整理的用途／重點（選填）</div><input value="${esc(C.tfocus || '')}" placeholder="例如：給 Justice 的產銷會議重點" oninput="C.tfocus=this.value">
+      <div class="hint">圖檔做好後，固定由 <b>Claude</b> 對照原逐字稿檢查，通過才算完成。</div>`;
   if (m === 'quick') return `<div class="lbl">裁判</div><select onchange="C.judge=this.value;refresh()">${[['rotate', '輪流（每次換一家）']].concat(PROVS.map(p => [p, N(p)])).map(([v, t]) => `<option value="${v}" ${C.judge === v ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
   return '';
 }
@@ -1534,7 +1664,7 @@ function materialsPanel(tp) {
   const sentInfo = tp.exec === 'semi' ? PROVS.map(p => `${N(p)} 已送 ${(tp.sent || {})[p] || 0}`).join('、') : '';
   return `<details class="plain" ${OPEN['mat_' + tp.id] ? 'open' : ''} ontoggle="OPEN['mat_${tp.id}']=this.open"><summary>📁 已存資料（${tp.materials.length} 份）</summary>
     ${sentInfo ? `<div class="meta">${sentInfo}（還沒送的資料，會在下一次給該 AI 的訊息裡一起帶上）</div>` : ''}
-    ${tp.materials.map((m, i) => `<div class="mat"><div class="meta">(${i + 1}) ${fmtDate(m.at)}${m.images.length ? `　${m.images.length} 張圖` : ''}
+    ${tp.materials.map((m, i) => `<div class="mat"><div class="meta">(${i + 1}) ${m.kind === 'transcript' ? `📝 逐字稿${m.label ? '（' + esc(m.label) + '）' : ''}　` : ''}${fmtDate(m.at)}${m.images.length ? `　${m.images.length} 張圖` : ''}
       <button class="mini danger" onclick="delMat('${tp.id}','${m.id}')">刪除</button></div>
       ${m.text ? `<div class="mtext">${esc(m.text.length > 300 ? m.text.slice(0, 300) + '…' : m.text)}</div>` : ''}
       ${m.images.length ? `<div class="imgs">${m.images.map(u => `<div class="thumb"><img src="${u}" alt="" onclick="zoom(this.src)"></div>`).join('')}</div>` : ''}</div>`).join('')}
@@ -1543,7 +1673,8 @@ function materialsPanel(tp) {
 function composer(tp) {
   const busy = tp.turns.some(t => RUNNING.has(t.id));
   return `<section class="card composer"><h3>💬 ${tp.turns.length ? '繼續這個主題' : '開始第一問'}</h3>
-    <textarea id="cmpText" rows="5" oninput="C.text=this.value" onpaste="pasteImg(event)" placeholder="輸入問題，或貼上資料（截圖可直接 Ctrl+V）">${esc(C.text)}</textarea>
+    <textarea id="cmpText" rows="${C.mode === 'transcript' ? 8 : 5}" oninput="C.text=this.value;const e=document.getElementById('tcount');if(e)e.textContent=tcInfo()" onpaste="pasteImg(event)" placeholder="${C.mode === 'transcript' ? '把逐字稿整段貼在這裡（例如從 Gemini 筆記本複製）' : '輸入問題，或貼上資料（截圖可直接 Ctrl+V）'}">${esc(C.text)}</textarea>
+    ${C.mode === 'transcript' ? `<div class="meta" id="tcount">${tcInfo()}</div>` : ''}
     <div class="imgs">${C.images.map((u, i) => `<div class="thumb"><img src="${u}" alt=""><button onclick="C.images.splice(${i},1);refresh()">✕</button></div>`).join('')}</div>
     <label class="btn">📷 加入圖片<input type="file" accept="image/*" multiple hidden onchange="addImgs(this.files)"></label>
     <div class="lbl">分析模式</div>
@@ -1554,7 +1685,7 @@ function composer(tp) {
     <select onchange="C.template=this.value;refresh()"><option value="">一般（不套用）</option>${(S.templates || []).map(t => `<option value="${t.id}" ${C.template === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
     ${C.template && TPL(C.template) ? `<div class="hint" style="white-space:pre-wrap">${esc(TPL(C.template).focus)}</div>` : ''}
     <div class="btns" style="margin-top:12px"><button onclick="storeMat('${tp.id}')">📥 只存資料（先不分析）</button>
-    <button class="primary" ${busy ? 'disabled' : ''} onclick="ask('${tp.id}')">▶ 送出分析（${tp.exec === 'semi' ? '半自動' : '自動'}）</button></div>
+    <button class="primary" ${busy ? 'disabled' : ''} onclick="ask('${tp.id}')">▶ ${C.mode === 'transcript' ? '開始整理逐字稿' : '送出分析'}（${tp.exec === 'semi' ? '半自動' : '自動'}）</button></div>
     ${busy ? '<div class="hint">上一問還在進行中，完成後才能送出新的分析；資料可以先存。</div>' : ''}
   </section>`;
 }
@@ -1608,6 +1739,7 @@ async function ask(tpid) {
   const q = C.text.trim();
   if (!q && !C.images.length && !tp.materials.length) return toast('請先輸入問題或資料');
   if (C.mode === 'relay' && C.author === C.reviewer) return toast('主寫和審查不能是同一家');
+  if (C.mode === 'transcript') return askTranscript(tp);
   let judge = C.judge;
   if (C.mode === 'quick' && judge === 'rotate') { judge = PROVS[S.judgeRot % 3]; S.judgeRot++; }
   const config = { author: C.author, reviewer: C.reviewer, arbiter: C.arbiter || null, rounds: +C.rounds, judge, lead: C.lead, single: C.single || 'anthropic' };
@@ -1616,8 +1748,25 @@ async function ask(tpid) {
   const tpl = TPL(C.template);
   const turn = { id: uid(), at: Date.now(), question: q, mode: C.mode, config, exec: tp.exec, steps: [], status: 'running', final: null, pending: [], tplName: tpl ? tpl.name : '', tplFocus: tpl ? tpl.focus : '' };
   tp.turns.push(turn); reg(tp);
-  S.last = { mode: C.mode, author: C.author, reviewer: C.reviewer, arbiter: C.arbiter, rounds: +C.rounds, judge: C.judge, lead: C.lead, template: C.template, single: C.single }; saveS();
+  S.last = { ...S.last, mode: C.mode, author: C.author, reviewer: C.reviewer, arbiter: C.arbiter, rounds: +C.rounds, judge: C.judge, lead: C.lead, template: C.template, single: C.single }; saveS();
   C.text = ''; C.images = [];
+  for (const x of tp.turns) if (x !== turn) OPEN['turn_' + x.id] = false;
+  await save(tp); refresh();
+  document.getElementById('turn_' + turn.id)?.scrollIntoView();
+  run(turn);
+}
+async function askTranscript(tp) {
+  const txt = C.text.trim();
+  if (txt.length < 20) return toast('請先貼上逐字稿');
+  const config = { lead: C.tlead || 'anthropic', tcheck: !!C.tcheck };
+  if (tp.exec !== 'semi' && !keysOK(needProvs(config, 'transcript'))) return go('settings');
+  const mat = { id: uid(), at: Date.now(), text: txt, images: [...C.images], kind: 'transcript', label: (C.tsrc || '').trim() };
+  tp.materials.push(mat);
+  const tpl = TPL(C.template), focus = (C.tfocus || '').trim();
+  const turn = { id: uid(), at: Date.now(), question: `📝 逐字稿整理${focus ? '：' + focus : ''}`, mode: 'transcript', config, exec: tp.exec, steps: [], status: 'running', final: null, pending: [], tplName: tpl ? tpl.name : '', tplFocus: tpl ? tpl.focus : '', transcriptId: mat.id, tfocus: focus };
+  tp.turns.push(turn); reg(tp);
+  S.last = { ...S.last, mode: 'transcript', tlead: config.lead, tcheck: config.tcheck, tsrc: C.tsrc, template: C.template }; saveS();
+  C.text = ''; C.images = []; C.tfocus = '';
   for (const x of tp.turns) if (x !== turn) OPEN['turn_' + x.id] = false;
   await save(tp); refresh();
   document.getElementById('turn_' + turn.id)?.scrollIntoView();
@@ -1673,6 +1822,8 @@ function rerunPlan(s, st) {
     case 'refine': { const k = roundOf(st); return [st, ...all.filter(x => (x.type === 'refine' && roundOf(x) > k) || (x.type === 'integrate' && intRound(x) >= k))]; }
     case 'integrate': { const k = intRound(st); return [st, ...all.filter(x => (x.type === 'integrate' && intRound(x) > k) || (x.type === 'refine' && roundOf(x) > k))]; }
     case 'cross': return [st, ...all.filter(x => x.type === 'judge')];
+    case 'tclean': return [st, ...all.filter(x => ['tverify', 'tfix'].includes(x.type))];
+    case 'tverify': return [st, ...all.filter(x => x.type === 'tfix')];
     default: return [st];
   }
 }
@@ -1701,7 +1852,7 @@ async function moreRound(id) {
 }
 async function pickFinal(id, stId) {
   const s = T(id); const st = s.steps.find(x => x.id === stId);
-  s.final = content(st); s.report = (st.type === 'integrate' || st.type === 'judge') ? splitReport(st.text).report : ''; s.finalStepId = st.id; s.finalManual = true;
+  s.final = content(st); s.report = (st.type === 'integrate' || st.type === 'judge' || st.type === 'tfix') ? splitReport(st.text).report : ''; s.finalStepId = st.id; s.finalManual = true;
   await save(s); refresh(); toast('已設為最終版');
 }
 function noteModal(id) {
