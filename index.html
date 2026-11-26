@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>My AI Council 我的 AI 智囊團</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111827">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:18px/1.65 system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",sans-serif;color:#111;background:#eef2f7;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:5;background:#111827;color:#fff;padding:12px 16px;display:flex;align-items:baseline;gap:10px}
+header h1{font-size:21px;margin:0}
+header small{color:#e5e7eb;font-size:14px}
+main{max-width:920px;margin:0 auto;padding:12px}
+.card{background:#fff;border:2px solid #cbd5e1;border-radius:14px;padding:14px;margin-bottom:12px}
+.card h3{margin:0 0 6px;font-size:20px}
+.lbl{font-weight:700;margin:12px 0 6px}
+textarea,input,select{width:100%;font:inherit;color:#111;border:2px solid #475569;border-radius:10px;padding:10px;background:#fff}
+textarea{resize:vertical}
+button,.btn{font:inherit;font-weight:700;min-height:48px;padding:8px 14px;border-radius:10px;border:2px solid #111827;background:#fff;color:#111827;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+button:disabled{opacity:.45}
+.primary{background:#111827;color:#fff}
+.danger{border-color:#b91c1c;color:#b91c1c}
+.big{width:100%;font-size:20px;min-height:58px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip.on{background:#111827;color:#fff}
+.hint{color:#1f2937;font-size:16px;margin-top:6px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+nav{position:fixed;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(3,1fr);background:#fff;border-top:2px solid #111827;padding-bottom:env(safe-area-inset-bottom);z-index:6}
+nav button{border:0;border-radius:0;min-height:66px;font-size:19px}
+nav button.on{background:#111827;color:#fff}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;color:#fff;font-size:15px;font-weight:700;white-space:nowrap}
+details.step{background:#fff;border:2px solid #cbd5e1;border-left:8px solid var(--c,#475569);border-radius:12px;margin-bottom:10px}
+details.step>summary{padding:12px 14px;font-weight:700;cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+details.step>summary::-webkit-details-marker{display:none}
+details.step>summary::before{content:"▸";font-size:18px}
+details.step[open]>summary::before{content:"▾"}
+details.step .body{padding:0 14px 14px}
+details.plain{margin-top:8px}
+details.plain>summary{font-weight:700;cursor:pointer;padding:4px 0}
+.meta{color:#1f2937;font-size:15px}
+.md{word-break:break-word}
+.md h2,.md h3,.md h4{margin:16px 0 6px;line-height:1.4}
+.md h2{font-size:21px}.md h3{font-size:19px}.md h4{font-size:18px}
+.md p{margin:8px 0}
+.md table{border-collapse:collapse;display:block;overflow-x:auto;margin:8px 0}
+.md td,.md th{border:1px solid #64748b;padding:6px 8px;vertical-align:top}
+.md th{background:#e2e8f0}
+.md pre{background:#f1f5f9;border:1px solid #94a3b8;padding:10px;overflow-x:auto;white-space:pre-wrap;font-size:15px;border-radius:8px}
+.md code{background:#e2e8f0;padding:0 4px;border-radius:4px}
+.md blockquote{border-left:4px solid #64748b;margin:8px 0;padding:2px 10px;background:#f8fafc}
+.final{border:3px solid #0a7d4f}
+.final.bad{border-color:#b45309}
+.warn{background:#fffbeb;border:2px solid #b45309;border-radius:10px;padding:10px 12px;margin:10px 0}
+.running{background:#eff6ff;border:2px solid #1d4ed8;border-radius:10px;padding:12px;font-weight:700;margin-bottom:10px;display:flex;gap:10px;align-items:center}
+.spin{width:22px;height:22px;border:4px solid #bfdbfe;border-top-color:#1d4ed8;border-radius:50%;animation:sp 1s linear infinite;flex:0 0 auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:4px}
+.tabs button{flex:0 0 auto}
+.tabs button.on{background:#111827;color:#fff}
+.item{background:#fff;border:2px solid #cbd5e1;border-radius:12px;padding:12px 14px;margin-bottom:10px;cursor:pointer}
+.item .t{font-weight:700;font-size:19px}
+.imgs{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0}
+.thumb{position:relative}
+.thumb img{width:96px;height:96px;object-fit:cover;border-radius:8px;border:2px solid #475569}
+.thumb button{position:absolute;top:-10px;right:-10px;min-height:34px;width:34px;padding:0;border-radius:50%;background:#b91c1c;color:#fff;border:0}
+#toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:#111827;color:#fff;padding:12px 18px;border-radius:10px;display:none;z-index:30;max-width:92%;font-weight:700}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.modal{background:#fff;width:100%;max-width:720px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+ul.issues{padding-left:22px;margin:8px 0}
+ul.issues li{margin-bottom:10px}
+.pv{font-weight:800}
+.empty{text-align:center;color:#1f2937;padding:30px 10px}
+.tbl{width:100%;border-collapse:collapse}
+.tbl td{padding:6px 4px;border-bottom:1px solid #cbd5e1}
+.tbl td:last-child{text-align:right;font-weight:700}
+</style>
+</head>
+<body>
+<header><h1>🧠 My AI Council</h1><small id="ver"></small></header>
+<main id="main"></main>
+<nav>
+  <button id="nav-new" onclick="go('new')">✍️ 新任務</button>
+  <button id="nav-history" onclick="go('history')">📚 紀錄</button>
+  <button id="nav-settings" onclick="go('settings')">⚙️ 設定</button>
+</nav>
+<div id="modal"></div>
+<div id="toast"></div>
+<script>
+'use strict';
+const APP_VERSION = '1.0.1';
+const FENCE = '```';
+
+/* ===================== 基本定義 ===================== */
+const P = {
+  openai:    { name: 'ChatGPT', color: '#0a7d4f' },
+  anthropic: { name: 'Claude',  color: '#c2410c' },
+  gemini:    { name: 'Gemini',  color: '#1d4ed8' }
+};
+const PROVS = ['openai', 'anthropic', 'gemini'];
+const N = p => (P[p] ? P[p].name : p);
+const MODES = {
+  relay:   { name: '接力審查', desc: '主寫 → 審查 → 依意見修正，自動來回，直到通過或達到輪數上限' },
+  compare: { name: '三方比較', desc: '三家各自獨立回答，切換查看（3 次呼叫）' },
+  quick:   { name: '快速驗證', desc: '三家回答＋裁判總結（4 次呼叫）' },
+  deep:    { name: '深度互審', desc: '三家回答＋各審另兩家＋裁判總結（7 次呼叫）' }
+};
+const STATUS = {
+  running:        ['執行中', '#1d4ed8'],
+  paused:         ['已暫停', '#374151'],
+  passed:         ['✅ 驗證通過', '#0a7d4f'],
+  passed_arbiter: ['✅ 經複審通過', '#0a7d4f'],
+  unverified:     ['⚠️ 未通過驗證', '#b45309'],
+  need_evidence:  ['📎 待補資料', '#b45309'],
+  disputed:       ['⚖️ 意見分歧', '#7c3aed'],
+  needs_decision: ['❓ 待你判定', '#b45309'],
+  error:          ['❌ 中斷，可續跑', '#b91c1c'],
+  done:           ['✅ 完成', '#0a7d4f']
+};
+const VERD = {
+  PASS:          ['通過', '#0a7d4f'],
+  REVISE:        ['需修改', '#b45309'],
+  NEED_EVIDENCE: ['待補資料', '#b45309'],
+  DISAGREE:      ['有爭議', '#7c3aed'],
+  UNKNOWN:       ['無法解析', '#b91c1c']
+};
+
+/* ===================== 提示詞 ===================== */
+const AUTHOR_SYS = `你是「主寫者」。請用繁體中文，針對使用者的問題給出完整、結構清楚的回答。
+規則：
+1. 若有原始資料（文字或圖片），所有數字、事實一律以原始資料為準，不可編造，也不可把推估寫成事實。
+2. 需要計算的地方，列出計算式。
+3. 無法從資料確認的內容，明確標註「待查證」。
+4. 直接給出內容，不要寒暄。`;
+
+const REVIEWER_SYS = `你是「審查者」，負責嚴格檢查另一個 AI 的回答。用繁體中文。
+檢查重點：事實錯誤、數字或計算錯誤、與原始資料不符、推論漏洞、重大遺漏、結論是否站得住。
+判定規則：
+- PASS：沒有重大問題（只剩小瑕疵也可以 PASS，小瑕疵列為 minor）。
+- REVISE：有至少一個重大問題（major），需要修改。
+- NEED_EVIDENCE：缺少關鍵資料，不向使用者索取就無法判斷。
+- DISAGREE：主寫者上一輪「不接受」你的某個重大意見，你看過他的理由後仍認為自己正確。把堅持的意見 id 列在 disputed_ids。
+不要為了挑錯而挑錯；已經修正的問題不要重複提出；主寫者理由正確時要接受。
+輸出格式：只輸出一個 JSON 區塊，不要有其他文字：
+${FENCE}json
+{"verdict":"PASS","summary":"一句話總評","issues":[{"id":1,"severity":"major","problem":"問題描述","suggestion":"修改建議"}],"evidence_needed":[],"disputed_ids":[]}
+${FENCE}
+verdict 只能是 PASS、REVISE、NEED_EVIDENCE、DISAGREE 其中之一；severity 只能是 major 或 minor。`;
+
+const REVISER_SYS = `你是「主寫者」，正在依照審查意見修改自己的回答。用繁體中文。
+對每一條審查意見決定 accept（接受並修改）或 reject（不接受，必須說明具體理由與依據）。
+不要盲目接受：審查者也可能錯，若原始資料支持你的版本就 reject 並說明。
+若有「第三方複審裁定」，裁定結果必須遵循。
+輸出格式：先輸出一個 JSON 區塊，接著單獨一行「===修正版===」，之後是修正後的「完整全文」（不是只寫修改處）：
+${FENCE}json
+{"responses":[{"id":1,"decision":"accept","reason":"說明"}]}
+${FENCE}
+===修正版===
+（完整修正後全文）`;
+
+const ARBITER_SYS = `你是「第三方複審」。主寫者與審查者對某些意見無法取得共識，由你獨立裁定。用繁體中文。
+以原始資料與事實為唯一依據，不偏袒任何一方。
+只輸出一個 JSON 區塊：
+${FENCE}json
+{"rulings":[{"id":1,"winner":"author","reason":"裁定理由"}],"summary":"整體說明"}
+${FENCE}
+winner 只能是 author（主寫者有理）或 reviewer（審查者有理）。`;
+
+const CROSS_SYS = `你是審查者。請檢查另外兩位 AI 的回答，用繁體中文、Markdown 條列：
+1. 事實或數字錯誤
+2. 推論漏洞
+3. 重要遺漏
+4. 你認為最可信的論點（註明是誰的）
+若發現你自己的回答也有錯，一併指出。以原始資料為準。`;
+
+const JUDGE_SYS = `你是裁判，綜合多位 AI 的回答（以及互審意見）產出最終報告。用繁體中文，一律以原始資料為準。
+必須依序使用以下五個標題：
+## 三方共識
+## 觀點分歧
+## 數據與邏輯錯誤
+## 遺漏與待查證
+## 最終修正版
+「觀點分歧」要寫明誰主張什麼；「最終修正版」要是一份可以直接使用的完整答案。`;
+
+/* ===================== 設定 ===================== */
+const DEF = {
+  keys:   { openai: '', anthropic: '', gemini: '' },
+  models: { openai: '', anthropic: '', gemini: '' },
+  prices: { openai: { in: '', out: '' }, anthropic: { in: '', out: '' }, gemini: { in: '', out: '' } },
+  lists:  { openai: [], anthropic: [], gemini: [] },
+  budget: 30,
+  judgeRot: 0,
+  last: { mode: 'relay', author: 'openai', reviewer: 'anthropic', arbiter: 'gemini', rounds: 3, judge: 'rotate' }
+};
+function deepMerge(a, b) {
+  for (const k in b) {
+    if (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k]) && a[k] && typeof a[k] === 'object') deepMerge(a[k], b[k]);
+    else a[k] = b[k];
+  }
+  return a;
+}
+function loadS() {
+  try { return deepMerge(structuredClone(DEF), JSON.parse(localStorage.getItem('aic_settings') || '{}')); }
+  catch (e) { return structuredClone(DEF); }
+}
+let S = loadS();
+function saveS() { localStorage.setItem('aic_settings', JSON.stringify(S)); }
+
+/* ===================== IndexedDB ===================== */
+const DB = {
+  db: null,
+  open() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('ai-council', 1);
+      r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains('sessions')) d.createObjectStore('sessions', { keyPath: 'id' }); };
+      r.onsuccess = () => { this.db = r.result; res(); };
+      r.onerror = () => rej(r.error);
+    });
+  },
+  req(mode, fn) {
+    return new Promise((res, rej) => {
+      const q = fn(this.db.transaction('sessions', mode).objectStore('sessions'));
+      q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+    });
+  },
+  put(s) { return this.req('readwrite', st => st.put(s)); },
+  all()  { return this.req('readonly', st => st.getAll()); },
+  del(id){ return this.req('readwrite', st => st.delete(id)); }
+};
+const SESS = new Map();
+async function save(s) { s.updatedAt = Date.now(); SESS.set(s.id, s); await DB.put(JSON.parse(JSON.stringify(s))); }
+
+/* ===================== 工具函式 ===================== */
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function fmtDate(t) { const d = new Date(t); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+function money(x) { return x == null ? '—' : '$' + x.toFixed(x < 0.1 ? 4 : 2); }
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => t.style.display = 'none', 2600); }
+function badge(label, color) { return `<span class="badge" style="background:${color}">${esc(label)}</span>`; }
+function stBadge(st) { const x = STATUS[st] || [st, '#374151']; return badge(x[0], x[1]); }
+function calcCost(p, tin, tout) {
+  const pr = S.prices[p] || {}; const a = parseFloat(pr.in), b = parseFloat(pr.out);
+  if (isNaN(a) || isNaN(b)) return null;
+  return (tin * a + tout * b) / 1e6;
+}
+function totals(s) {
+  let c = 0, has = false, tin = 0, tout = 0, calls = 0;
+  for (const st of s.steps) { if (st.cost != null) { c += st.cost; has = true; } tin += st.tin || 0; tout += st.tout || 0; if (st.provider && st.status === 'ok') calls++; }
+  return { c: has ? c : null, tin, tout, calls };
+}
+function monthStats() {
+  const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+  const r = { openai: 0, anthropic: 0, gemini: 0, total: 0, missing: false };
+  for (const s of SESS.values()) for (const st of s.steps) {
+    if (!st.at || !st.provider || st.status !== 'ok') continue;
+    const d = new Date(st.at); if (d.getFullYear() !== y || d.getMonth() !== m) continue;
+    if (st.cost == null) { r.missing = true; continue; }
+    r[st.provider] += st.cost; r.total += st.cost;
+  }
+  return r;
+}
+
+/* 簡易 Markdown */
+function md(src) {
+  if (!src) return '';
+  const inl = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const L = String(src).replace(/\r/g, '').split('\n'); const out = []; let i = 0;
+  const isList = l => /^\s*([-*+]|\d+[.)])\s+/.test(l);
+  const isTbl = l => /^\s*\|.*\|\s*$/.test(l);
+  while (i < L.length) {
+    const l = L[i];
+    if (/^\s*```/.test(l)) { const b = []; i++; while (i < L.length && !/^\s*```/.test(L[i])) { b.push(L[i]); i++; } i++; out.push('<pre>' + esc(b.join('\n')) + '</pre>'); continue; }
+    const h = l.match(/^(#{1,6})\s+(.*)/);
+    if (h) { const n = Math.min(h[1].length + 1, 4); out.push(`<h${n}>${inl(h[2])}</h${n}>`); i++; continue; }
+    if (isTbl(l) && i + 1 < L.length && /^\s*\|?\s*:?-{2,}/.test(L[i + 1])) {
+      const cells = r => r.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => inl(c.trim()));
+      let t = '<table><tr>' + cells(l).map(c => `<th>${c}</th>`).join('') + '</tr>'; i += 2;
+      while (i < L.length && isTbl(L[i])) { t += '<tr>' + cells(L[i]).map(c => `<td>${c}</td>`).join('') + '</tr>'; i++; }
+      out.push(t + '</table>'); continue;
+    }
+    if (isList(l)) {
+      const ord = /^\s*\d/.test(l); const it = [];
+      while (i < L.length && isList(L[i])) { it.push(L[i].replace(/^\s*([-*+]|\d+[.)])\s+/, '')); i++; }
+      out.push((ord ? '<ol>' : '<ul>') + it.map(x => '<li>' + inl(x) + '</li>').join('') + (ord ? '</ol>' : '</ul>')); continue;
+    }
+    if (/^\s*(---+|\*\*\*+)\s*$/.test(l)) { out.push('<hr>'); i++; continue; }
+    if (/^>\s?/.test(l)) { const b = []; while (i < L.length && /^>\s?/.test(L[i])) { b.push(inl(L[i].replace(/^>\s?/, ''))); i++; } out.push('<blockquote>' + b.join('<br>') + '</blockquote>'); continue; }
+    if (!l.trim()) { i++; continue; }
+    const p = [];
+    while (i < L.length && L[i].trim() && !/^\s*```/.test(L[i]) && !/^#{1,6}\s/.test(L[i]) && !isList(L[i]) && !isTbl(L[i]) && !/^>\s?/.test(L[i])) { p.push(inl(L[i])); i++; }
+    if (!p.length) { p.push(inl(l)); i++; }
+    out.push('<p>' + p.join('<br>') + '</p>');
+  }
+  return out.join('');
+}
+
+function parseJSON(t) {
+  if (!t) return null;
+  const m = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const s = m ? m[1] : t;
+  const a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a < 0 || b < a) return null;
+  try { return JSON.parse(s.slice(a, b + 1)); } catch (e) { return null; }
+}
+
+/* ===================== 呼叫三家 API ===================== */
+function splitDataURL(u) { const [meta, data] = u.split(','); return { mime: (meta.match(/data:(.*?);/) || [])[1] || 'image/jpeg', data }; }
+async function apiErr(p, r) {
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  const m = j?.error?.message || j?.error?.status || r.statusText || '';
+  return new Error(`${N(p)} 錯誤 ${r.status}：${m}`);
+}
+async function callAI(p, system, user, images) {
+  const key = S.keys[p], model = S.models[p];
+  if (!key) throw new Error(`${N(p)} 尚未設定 API Key`);
+  if (!model) throw new Error(`${N(p)} 尚未選擇模型`);
+  const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), 300000);
+  try {
+    let r, j;
+    if (p === 'openai') {
+      r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({ model, messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: [{ type: 'text', text: user }, ...images.map(u => ({ type: 'image_url', image_url: { url: u } }))] }
+        ] })
+      });
+      if (!r.ok) throw await apiErr(p, r);
+      j = await r.json();
+      return { text: j.choices?.[0]?.message?.content || '', tin: j.usage?.prompt_tokens || 0, tout: j.usage?.completion_tokens || 0 };
+    }
+    if (p === 'anthropic') {
+      r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model, max_tokens: 8192, system, messages: [
+          { role: 'user', content: [...images.map(u => { const d = splitDataURL(u); return { type: 'image', source: { type: 'base64', media_type: d.mime, data: d.data } }; }), { type: 'text', text: user }] }
+        ] })
+      });
+      if (!r.ok) throw await apiErr(p, r);
+      j = await r.json();
+      let text = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+      if (j.stop_reason === 'max_tokens') text += '\n\n（⚠️ 回答過長被截斷）';
+      return { text, tin: j.usage?.input_tokens || 0, tout: j.usage?.output_tokens || 0 };
+    }
+    if (p === 'gemini') {
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
+        method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [
+          { role: 'user', parts: [{ text: user }, ...images.map(u => { const d = splitDataURL(u); return { inline_data: { mime_type: d.mime, data: d.data } }; })] }
+        ] })
+      });
+      if (!r.ok) throw await apiErr(p, r);
+      j = await r.json();
+      if (j.promptFeedback?.blockReason) throw new Error(`Gemini 拒絕回答：${j.promptFeedback.blockReason}`);
+      const text = (j.candidates?.[0]?.content?.parts || []).filter(x => !x.thought).map(x => x.text || '').join('');
+      const u = j.usageMetadata || {};
+      return { text, tin: u.promptTokenCount || 0, tout: (u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0) };
+    }
+    throw new Error('未知的 AI：' + p);
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error(`${N(p)} 逾時（超過 5 分鐘）`);
+    if (e instanceof TypeError) throw new Error(`${N(p)} 連線失敗（網路中斷，或 App 被切到背景）`);
+    throw e;
+  } finally { clearTimeout(tm); }
+}
+async function listModels(p) {
+  const key = S.keys[p]; if (!key) throw new Error('請先填 API Key');
+  let r, j;
+  if (p === 'openai') {
+    r = await fetch('https://api.openai.com/v1/models', { headers: { 'Authorization': 'Bearer ' + key } });
+    if (!r.ok) throw await apiErr(p, r); j = await r.json();
+    return (j.data || []).map(m => m.id).filter(id => /^(gpt|o\d|chatgpt)/.test(id) && !/(audio|realtime|tts|transcribe|image|search|embedding)/.test(id)).sort().reverse();
+  }
+  if (p === 'anthropic') {
+    r = await fetch('https://api.anthropic.com/v1/models?limit=100', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' } });
+    if (!r.ok) throw await apiErr(p, r); j = await r.json();
+    return (j.data || []).map(m => m.id);
+  }
+  r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`);
+  if (!r.ok) throw await apiErr(p, r); j = await r.json();
+  return (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && /gemini/.test(m.name) && !/(embedding|tts|image|audio)/.test(m.name)).map(m => m.name.replace('models/', '')).sort().reverse();
+}
+
+/* ===================== 流程引擎 ===================== */
+const okSteps = s => s.steps.filter(x => x.status === 'ok' && x.type !== 'note');
+const drafts = s => s.steps.filter(x => x.status === 'ok' && (x.type === 'draft' || x.type === 'revise'));
+const curDraft = s => { const d = drafts(s); return d[d.length - 1]; };
+const content = st => (st.type === 'revise' ? st.revised : st.text);
+function lastOk(s, type, beforeIdx) { const a = s.steps.slice(0, beforeIdx ?? s.steps.length).filter(x => x.status === 'ok' && x.type === type); return a[a.length - 1]; }
+
+function ctx(s) {
+  let t = `【使用者問題】\n${s.question || '（見原始資料）'}\n\n【原始資料】\n${(s.source || '').trim() || '（無文字資料）'}`;
+  if (s.images.length) t += `\n（另附 ${s.images.length} 張圖片，屬於原始資料）`;
+  const notes = s.steps.filter(x => x.type === 'note');
+  if (notes.length) t += '\n\n【使用者補充／指示】\n' + notes.map((n, i) => `${i + 1}. ${n.text}`).join('\n');
+  return t;
+}
+function fmtIssues(a) { if (!a || !a.length) return '（無）'; return a.map(i => `#${i.id} [${i.severity === 'major' ? '重大' : '次要'}] ${i.problem || ''}${i.suggestion ? `\n   建議：${i.suggestion}` : ''}`).join('\n'); }
+function fmtResp(a) { if (!a || !a.length) return '（未逐條回應）'; return a.map(r => `#${r.id} ${r.decision === 'reject' ? '不接受' : '接受'}：${r.reason || ''}`).join('\n'); }
+function fmtRulings(a) { if (!a || !a.length) return '（無）'; return a.map(r => `#${r.id} 判 ${r.winner === 'reviewer' ? '審查者' : '主寫者'} 有理：${r.reason || ''}`).join('\n'); }
+
+function nextRelay(s) {
+  const ok = okSteps(s);
+  if (!drafts(s).length) return { type: 'draft' };
+  const last = ok[ok.length - 1];
+  const nRev = ok.filter(x => x.type === 'review').length;
+  const max = s.config.rounds;
+  switch (last.type) {
+    case 'draft': case 'revise': return nRev >= max ? { type: 'end', status: 'unverified' } : { type: 'review' };
+    case 'force': return { type: 'review' };
+    case 'review': {
+      const v = last.verdict;
+      if (v === 'PASS') return { type: 'end', status: 'passed' };
+      if (v === 'NEED_EVIDENCE') { const i = s.steps.indexOf(last); return s.steps.slice(i + 1).some(x => x.type === 'note') ? { type: 'review' } : { type: 'wait', status: 'need_evidence' }; }
+      if (v === 'DISAGREE') return s.config.arbiter ? { type: 'arbitrate' } : { type: 'wait', status: 'disputed' };
+      if (v === 'REVISE') return nRev >= max ? { type: 'end', status: 'unverified' } : { type: 'revise' };
+      return { type: 'wait', status: 'needs_decision' };
+    }
+    case 'arbitrate': {
+      if (!last.data || !Array.isArray(last.data.rulings)) return { type: 'wait', status: 'needs_decision' };
+      return last.data.rulings.some(r => r.winner === 'reviewer') ? { type: 'revise' } : { type: 'end', status: 'passed_arbiter' };
+    }
+  }
+  return { type: 'wait', status: 'needs_decision' };
+}
+function nextMulti(s) {
+  const ok = okSteps(s);
+  const miss = PROVS.filter(p => !ok.some(x => x.type === 'answer' && x.provider === p));
+  if (miss.length) return { type: 'answers', list: miss };
+  if (s.mode === 'compare') return { type: 'end', status: 'done' };
+  if (s.mode === 'deep') { const mc = PROVS.filter(p => !ok.some(x => x.type === 'cross' && x.provider === p)); if (mc.length) return { type: 'cross', list: mc }; }
+  if (!ok.some(x => x.type === 'judge')) return { type: 'judge' };
+  return { type: 'end', status: 'done' };
+}
+const nextAction = s => (s.mode === 'relay' ? nextRelay(s) : nextMulti(s));
+
+function reviewPrompt(s) {
+  const cur = curDraft(s), v = drafts(s).length, ci = s.steps.indexOf(cur);
+  let u = ctx(s) + `\n\n【目前版本（第 ${v} 版，主寫：${N(s.config.author)}）】\n${content(cur)}`;
+  if (cur.type === 'revise') {
+    const pr = lastOk(s, 'review', ci);
+    if (pr) u += `\n\n【你上一輪的審查意見】\n${fmtIssues(pr.data?.issues)}`;
+    u += `\n\n【主寫者對各意見的回應】\n${fmtResp(cur.data?.responses)}`;
+    const ar = lastOk(s, 'arbitrate', ci);
+    if (ar && (!pr || s.steps.indexOf(ar) > s.steps.indexOf(pr))) u += `\n\n【第三方複審裁定】\n${fmtRulings(ar.data?.rulings)}`;
+  }
+  const lr = lastOk(s, 'review');
+  if (lr && lr.verdict === 'NEED_EVIDENCE' && s.steps.indexOf(lr) > ci) u += '\n\n（上一輪你要求補充資料，使用者已在【使用者補充／指示】中提供，請重新審查。）';
+  const lf = lastOk(s, 'force');
+  if (lf && s.steps.indexOf(lf) > ci) u += '\n\n（使用者要求再審一輪，請以更嚴格的標準重新檢查。）';
+  return u + '\n\n請審查目前版本，依規定只輸出 JSON。';
+}
+function revisePrompt(s) {
+  const cur = curDraft(s), rv = lastOk(s, 'review'), ar = lastOk(s, 'arbitrate');
+  let u = ctx(s) + `\n\n【目前版本（你寫的第 ${drafts(s).length} 版）】\n${content(cur)}`;
+  u += `\n\n【審查意見（審查者：${N(s.config.reviewer)}）】\n總評：${rv?.data?.summary || ''}\n${fmtIssues(rv?.data?.issues)}`;
+  if (ar && s.steps.indexOf(ar) > s.steps.indexOf(rv)) u += `\n\n【第三方複審裁定（必須遵循）】\n${fmtRulings(ar.data?.rulings)}`;
+  return u + '\n\n請依規定格式輸出：先 JSON 回應，再單獨一行「===修正版===」，接著完整全文。';
+}
+function arbPrompt(s) {
+  const cur = curDraft(s), rv = lastOk(s, 'review');
+  let u = ctx(s) + `\n\n【目前版本（主寫：${N(s.config.author)}）】\n${content(cur)}`;
+  u += `\n\n【審查者（${N(s.config.reviewer)}）意見】\n總評：${rv?.data?.summary || ''}\n${fmtIssues(rv?.data?.issues)}`;
+  u += `\n審查者堅持的爭議意見 id：${(rv?.data?.disputed_ids || []).join(', ') || '（未列出，請依主寫者不接受的項目判斷）'}`;
+  if (cur.type === 'revise') u += `\n\n【主寫者先前對意見的回應】\n${fmtResp(cur.data?.responses)}`;
+  return u + '\n\n請只針對爭議點逐一裁定，只輸出 JSON。';
+}
+const ansOf = (s, p) => (okSteps(s).find(x => x.type === 'answer' && x.provider === p) || {}).text || '（無）';
+function crossPrompt(s, p) {
+  let u = ctx(s) + '\n';
+  PROVS.filter(q => q !== p).forEach(q => { u += `\n【${N(q)} 的回答】\n${ansOf(s, q)}\n`; });
+  return u + `\n【你（${N(p)}）自己的回答】\n${ansOf(s, p)}\n\n請依指示審查。`;
+}
+function judgePrompt(s) {
+  let u = ctx(s) + '\n';
+  PROVS.forEach(p => { u += `\n【${N(p)} 的回答】\n${ansOf(s, p)}\n`; });
+  if (s.mode === 'deep') PROVS.forEach(p => { const c = okSteps(s).find(x => x.type === 'cross' && x.provider === p); if (c) u += `\n【${N(p)} 的互審意見】\n${c.text}\n`; });
+  return u + '\n請依五個標題輸出最終報告。';
+}
+
+async function step(s, p, system, user, meta) {
+  const t0 = Date.now();
+  try {
+    const r = await callAI(p, system, user, s.images);
+    const st = { id: uid(), type: meta.type, provider: p, model: S.models[p], round: meta.round, text: r.text, tin: r.tin, tout: r.tout, cost: calcCost(p, r.tin, r.tout), ms: Date.now() - t0, status: 'ok', at: Date.now() };
+    if (meta.post) meta.post(st);
+    s.steps.push(st);
+  } catch (e) {
+    s.steps.push({ id: uid(), type: meta.type, provider: p, round: meta.round, status: 'error', error: String(e.message || e), at: Date.now() });
+  }
+  await save(s); refresh();
+}
+const postReview = st => {
+  st.data = parseJSON(st.text);
+  const v = String(st.data?.verdict || '').toUpperCase().trim();
+  st.verdict = VERD[v] && v !== 'UNKNOWN' ? v : 'UNKNOWN';
+};
+const postRevise = st => {
+  const parts = st.text.split(/={3,}\s*修正版\s*={3,}/);
+  st.data = parseJSON(parts[0]) || { responses: [] };
+  st.revised = (parts.length > 1 ? parts.slice(1).join('\n') : st.text.replace(/```(?:json)?[\s\S]*?```/, '')).trim();
+};
+async function exec(s, a) {
+  const c = s.config, ok = okSteps(s);
+  const nRev = ok.filter(x => x.type === 'review').length;
+  switch (a.type) {
+    case 'draft':
+      s.current = `${N(c.author)} 撰寫第 1 版…`; refresh();
+      return step(s, c.author, AUTHOR_SYS, ctx(s) + '\n\n請完成回答。', { type: 'draft' });
+    case 'review':
+      s.current = `${N(c.reviewer)} 第 ${nRev + 1} 輪審查…`; refresh();
+      return step(s, c.reviewer, REVIEWER_SYS, reviewPrompt(s), { type: 'review', round: nRev + 1, post: postReview });
+    case 'revise':
+      s.current = `${N(c.author)} 依意見修正第 ${drafts(s).length + 1} 版…`; refresh();
+      return step(s, c.author, REVISER_SYS, revisePrompt(s), { type: 'revise', post: postRevise });
+    case 'arbitrate':
+      s.current = `${N(c.arbiter)} 第三方複審中…`; refresh();
+      return step(s, c.arbiter, ARBITER_SYS, arbPrompt(s), { type: 'arbitrate', post: st => { st.data = parseJSON(st.text); } });
+    case 'answers':
+      s.current = `${a.list.map(N).join('、')} 回答中…`; refresh();
+      return Promise.all(a.list.map(p => step(s, p, AUTHOR_SYS, ctx(s) + '\n\n請完成回答。', { type: 'answer' })));
+    case 'cross':
+      s.current = `${a.list.map(N).join('、')} 互相審查中…`; refresh();
+      return Promise.all(a.list.map(p => step(s, p, CROSS_SYS, crossPrompt(s, p), { type: 'cross' })));
+    case 'judge':
+      s.current = `${N(c.judge)} 裁判總結中…`; refresh();
+      return step(s, c.judge, JUDGE_SYS, judgePrompt(s), { type: 'judge' });
+  }
+}
+function finalize(s) {
+  if (s.finalManual) return;
+  if (s.mode === 'relay') { const d = curDraft(s); if (d) { s.final = content(d); s.finalStepId = d.id; } }
+  else { const j = okSteps(s).find(x => x.type === 'judge'); if (j) { s.final = j.text; s.finalStepId = j.id; } }
+}
+
+const RUNNING = new Set(), PAUSE = new Set();
+let wakeLock = null;
+async function lockWake() { try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) {} }
+function releaseWake() { if (!RUNNING.size && wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; } }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && RUNNING.size) lockWake(); });
+
+async function run(s) {
+  if (RUNNING.has(s.id)) return;
+  const ms = monthStats();
+  if (S.budget > 0 && ms.total >= S.budget && !confirm(`本月已用 ${money(ms.total)}，已達預算 $${S.budget}。仍要執行嗎？`)) return;
+  RUNNING.add(s.id); PAUSE.delete(s.id); s.status = 'running';
+  await save(s); refresh(); lockWake();
+  try {
+    for (let guard = 0; guard < 40; guard++) {
+      if (PAUSE.has(s.id)) { s.status = 'paused'; break; }
+      const a = nextAction(s);
+      if (a.type === 'end') { s.status = a.status; finalize(s); break; }
+      if (a.type === 'wait') { s.status = a.status; break; }
+      const before = s.steps.filter(x => x.status === 'error').length;
+      await exec(s, a);
+      s.current = null;
+      if (s.steps.filter(x => x.status === 'error').length > before) { s.status = 'error'; break; }
+    }
+  } catch (e) {
+    s.status = 'error';
+    s.steps.push({ id: uid(), type: 'sys', status: 'error', error: String(e.message || e), at: Date.now() });
+  } finally {
+    s.current = null; RUNNING.delete(s.id); PAUSE.delete(s.id);
+    await save(s); releaseWake(); refresh();
+    if (!(V.view === 'detail' && V.sid === s.id)) toast(`「${s.title}」${(STATUS[s.status] || [''])[0]}`);
+  }
+}
+
+/* ===================== 畫面狀態 ===================== */
+let V = { view: 'new', sid: null, tab: null };
+const F = { question: '', source: '', images: [], ...structuredClone(DEF.last) };
+Object.assign(F, S.last);
+const OPEN = {};
+
+function go(view) { V.view = view; if (view !== 'detail') V.sid = null; render(); window.scrollTo(0, 0); }
+function openS(id) { V = { view: 'detail', sid: id, tab: null }; render(); window.scrollTo(0, 0); }
+function refresh() { if (V.view === 'detail') renderDetail(); else if (V.view === 'history') renderHistory(); else if (V.view === 'settings') renderSettings(); }
+function render() {
+  ['new', 'history', 'settings'].forEach(k => document.getElementById('nav-' + k).classList.toggle('on', V.view === k || (k === 'history' && V.view === 'detail')));
+  if (V.view === 'new') renderNew(); else if (V.view === 'history') renderHistory(); else if (V.view === 'settings') renderSettings(); else renderDetail();
+}
+const $main = () => document.getElementById('main');
+
+/* ---------- 新任務 ---------- */
+function provSelect(field, withNone) {
+  const opts = (withNone ? [['', '不啟用']] : []).concat(PROVS.map(p => [p, N(p)]));
+  return `<select onchange="F.${field}=this.value;renderNew()">${opts.map(([v, t]) => `<option value="${v}" ${(F[field] || '') === v ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+}
+function renderNew() {
+  const m = F.mode; let cfg = '', est = '';
+  if (m === 'relay') {
+    cfg = `<div class="row"><div><div class="lbl">主寫</div>${provSelect('author')}</div><div><div class="lbl">審查</div>${provSelect('reviewer')}</div></div>
+      <div class="lbl">意見分歧時的第三方複審</div>${provSelect('arbiter', true)}
+      <div class="lbl">最多審查輪數</div><div class="chips">${[1, 2, 3, 5].map(n => `<button class="chip ${+F.rounds === n ? 'on' : ''}" onclick="F.rounds=${n};renderNew()">${n} 輪</button>`).join('')}</div>`;
+    est = `呼叫次數：最少 2 次（一次通過），最多 ${2 * F.rounds} 次${F.arbiter ? '，有分歧時另加複審' : ''}`;
+    if (F.author === F.reviewer) est += '<br><b style="color:#b91c1c">⚠️ 主寫和審查不能是同一家</b>';
+  } else {
+    if (m !== 'compare') cfg = `<div class="lbl">裁判</div><select onchange="F.judge=this.value;renderNew()">${[['rotate', '輪流（每次換一家）']].concat(PROVS.map(p => [p, N(p)])).map(([v, t]) => `<option value="${v}" ${F.judge === v ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+    est = `呼叫次數：${{ compare: 3, quick: 4, deep: 7 }[m]} 次`;
+  }
+  $main().innerHTML = `
+  <section class="card"><div class="lbl" style="margin-top:0">模式</div>
+    <div class="chips">${Object.entries(MODES).map(([k, x]) => `<button class="chip ${m === k ? 'on' : ''}" onclick="F.mode='${k}';renderNew()">${x.name}</button>`).join('')}</div>
+    <div class="hint">${MODES[m].desc}</div></section>
+  <section class="card">
+    <div class="lbl" style="margin-top:0">問題／要 AI 做的事</div>
+    <textarea rows="4" oninput="F.question=this.value" placeholder="例如：請檢查這份分析的數據、計算與推論是否正確">${esc(F.question)}</textarea>
+    <div class="lbl">原始資料（選填，可貼長文；也可直接貼上截圖）</div>
+    <textarea rows="7" oninput="F.source=this.value" onpaste="pasteImg(event)" placeholder="貼上報告、數據、上一個 AI 的回答……">${esc(F.source)}</textarea>
+    <div class="imgs">${F.images.map((u, i) => `<div class="thumb"><img src="${u}" alt=""><button onclick="F.images.splice(${i},1);renderNew()">✕</button></div>`).join('')}</div>
+    <label class="btn">📷 加入圖片<input type="file" accept="image/*" multiple hidden onchange="addImgs(this.files)"></label>
+  </section>
+  <section class="card">${cfg}<div class="hint">${est}</div></section>
+  <button class="primary big" onclick="start()">▶ 開始</button>`;
+}
+function compress(file) {
+  return new Promise((res, rej) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      let w = img.width, h = img.height; const M = 2000;
+      if (Math.max(w, h) > M) { const r = M / Math.max(w, h); w = Math.round(w * r); h = Math.round(h * r); }
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', 0.9));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('圖片讀取失敗')); };
+    img.src = url;
+  });
+}
+async function addImgs(files) { for (const f of files) { try { F.images.push(await compress(f)); } catch (e) { toast(e.message); } } renderNew(); }
+function pasteImg(e) {
+  const items = [...(e.clipboardData?.items || [])].filter(it => it.type.startsWith('image/'));
+  if (!items.length) return;
+  e.preventDefault();
+  Promise.all(items.map(it => compress(it.getAsFile()))).then(us => { F.images.push(...us); renderNew(); });
+}
+function needProvs(c, mode) { return mode === 'relay' ? [c.author, c.reviewer, c.arbiter].filter(Boolean) : PROVS; }
+async function start() {
+  const q = F.question.trim();
+  if (!q && !F.source.trim() && !F.images.length) return toast('請先輸入問題或資料');
+  if (F.mode === 'relay' && F.author === F.reviewer) return toast('主寫和審查不能是同一家');
+  let judge = F.judge;
+  if (F.mode !== 'relay' && judge === 'rotate') { judge = PROVS[S.judgeRot % 3]; S.judgeRot++; }
+  const config = { author: F.author, reviewer: F.reviewer, arbiter: F.arbiter || null, rounds: +F.rounds, judge };
+  const miss = needProvs(config, F.mode).filter(p => !S.keys[p] || !S.models[p]);
+  if (miss.length) { toast(`請先到設定填好 ${miss.map(N).join('、')} 的 Key 與模型`); return go('settings'); }
+  const s = { id: uid(), createdAt: Date.now(), updatedAt: Date.now(), title: (q || F.source.trim() || '圖片檢查').split('\n')[0].slice(0, 40), mode: F.mode, question: q, source: F.source, images: [...F.images], config, steps: [], status: 'running', final: null };
+  S.last = { mode: F.mode, author: F.author, reviewer: F.reviewer, arbiter: F.arbiter, rounds: +F.rounds, judge: F.judge }; saveS();
+  await save(s);
+  F.question = ''; F.source = ''; F.images = [];
+  openS(s.id);
+  run(s);
+}
+
+/* ---------- 紀錄 ---------- */
+function renderHistory() {
+  const list = [...SESS.values()].sort((a, b) => b.createdAt - a.createdAt);
+  $main().innerHTML = list.length ? list.map(s => {
+    const t = totals(s);
+    return `<div class="item" onclick="openS('${s.id}')"><div class="t">${esc(s.title)}</div>
+      <div class="meta">${MODES[s.mode].name}　${fmtDate(s.createdAt)}　${money(t.c)}</div><div style="margin-top:6px">${stBadge(s.status)}</div></div>`;
+  }).join('') : '<div class="empty">還沒有紀錄。到「新任務」開始第一次驗證。</div>';
+}
+
+/* ---------- 詳細頁 ---------- */
+function stepTitle(s, st) {
+  const n = st.provider ? N(st.provider) : '';
+  switch (st.type) {
+    case 'draft': return `第 1 版 · ${n} 主寫`;
+    case 'revise': return `第 ${drafts(s).indexOf(st) + 1} 版（依審查修正）· ${n}`;
+    case 'review': return `第 ${st.round || '?'} 輪審查 · ${n}`;
+    case 'arbitrate': return `第三方複審裁定 · ${n}`;
+    case 'answer': return `${n} 的回答`;
+    case 'cross': return `${n} 的互審意見`;
+    case 'judge': return `裁判總結 · ${n}`;
+    case 'note': return '📎 你的補充／指示';
+    case 'force': return '🔁 你要求再審一輪';
+    default: return '系統';
+  }
+}
+function stepMeta(st) {
+  if (!st.provider || st.status !== 'ok') return '';
+  return `<div class="meta">${esc(st.model || '')}　輸入 ${st.tin} / 輸出 ${st.tout} tokens　${money(st.cost)}　${(st.ms / 1000).toFixed(0)} 秒</div>`;
+}
+function reviewBody(s, st, isLast) {
+  let h = '';
+  if (st.data) {
+    h += `<p><b>總評：</b>${esc(st.data.summary || '')}</p>`;
+    const is = st.data.issues || [];
+    if (is.length) h += '<ul class="issues">' + is.map(i => `<li>${badge(i.severity === 'major' ? '重大' : '次要', i.severity === 'major' ? '#b91c1c' : '#475569')} <b>#${esc(i.id)}</b> ${esc(i.problem)}${i.suggestion ? `<br><span class="meta">建議：${esc(i.suggestion)}</span>` : ''}</li>`).join('') + '</ul>';
+    const ev = st.data.evidence_needed || [];
+    if (ev.length) h += `<div class="warn"><b>需要你補充：</b><ul class="issues">${ev.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
+    if ((st.data.disputed_ids || []).length) h += `<p class="meta">堅持的爭議意見：#${st.data.disputed_ids.map(esc).join('、#')}</p>`;
+  } else h += `<div class="warn">審查結果格式無法解析，以下是原文。請你直接改判。</div><div class="md">${md(st.text)}</div>`;
+  if (st.originalVerdict) h += `<p class="meta">原判定：${VERD[st.originalVerdict]?.[0] || st.originalVerdict}，已由你改判</p>`;
+  if (isLast && !RUNNING.has(s.id)) h += `<div class="btns"><button onclick="override('${s.id}','${st.id}','PASS')">✅ 改判通過</button><button onclick="override('${s.id}','${st.id}','REVISE')">✏️ 改判需修改</button></div>`;
+  return h;
+}
+function stepCard(s, st, opts = {}) {
+  const color = st.provider ? P[st.provider].color : '#475569';
+  let title = stepTitle(s, st), extra = '', body = '';
+  if (st.status === 'error') { title = '❌ ' + title + ' 失敗'; body = `<div class="warn">${esc(st.error)}</div><p class="meta">按「續跑」會從這一步重新執行。</p>`; }
+  else if (st.type === 'review') { extra = badge(VERD[st.verdict]?.[0] || st.verdict, VERD[st.verdict]?.[1] || '#475569'); body = reviewBody(s, st, opts.isLastReview); }
+  else if (st.type === 'revise') {
+    const rs = st.data?.responses || [];
+    if (rs.length) body += '<p><b>對審查意見的回應：</b></p><ul class="issues">' + rs.map(r => `<li>${badge(r.decision === 'reject' ? '不接受' : '接受', r.decision === 'reject' ? '#7c3aed' : '#0a7d4f')} <b>#${esc(r.id)}</b> ${esc(r.reason)}</li>`).join('') + '</ul>';
+    body += `<details class="plain" ${opts.isLatestDraft ? 'open' : ''}><summary>📄 修正後全文</summary><div class="md">${md(st.revised)}</div></details>`;
+  }
+  else if (st.type === 'arbitrate') {
+    if (st.data) { body = `<p>${esc(st.data.summary || '')}</p><ul class="issues">` + (st.data.rulings || []).map(r => `<li>${badge(r.winner === 'reviewer' ? '審查者有理' : '主寫者有理', r.winner === 'reviewer' ? '#b45309' : '#0a7d4f')} <b>#${esc(r.id)}</b> ${esc(r.reason)}</li>`).join('') + '</ul>'; }
+    else body = `<div class="warn">複審結果無法解析，原文如下。</div><div class="md">${md(st.text)}</div>`;
+  }
+  else if (st.type === 'note') body = `<p>${esc(st.text).replace(/\n/g, '<br>')}</p>`;
+  else if (st.type === 'force') body = '<p>已追加一輪審查。</p>';
+  else body = `<div class="md">${md(st.text)}</div>`;
+  if (st.status === 'ok' && ['draft', 'revise', 'answer', 'judge'].includes(st.type)) body += `<div class="btns"><button onclick="pickFinal('${s.id}','${st.id}')">${s.finalStepId === st.id ? '⭐ 目前的最終版' : '☆ 選為最終版'}</button></div>`;
+  const open = OPEN[st.id] ?? !!opts.defOpen;
+  return `<details class="step" style="--c:${color}" ${open ? 'open' : ''} ontoggle="OPEN['${st.id}']=this.open"><summary>${esc(title)} ${extra}</summary><div class="body">${stepMeta(st)}${body}</div></details>`;
+}
+function finalCard(s) {
+  if (!s.final) return '';
+  const bad = s.status === 'unverified' || s.status === 'disputed';
+  let h = `<section class="card final ${bad ? 'bad' : ''}"><h3>${bad ? '⚠️ 目前版本（尚未通過驗證）' : '⭐ 最終版本'}${s.finalManual ? '（你選定）' : ''}</h3>`;
+  if (s.status === 'unverified') {
+    const rv = lastOk(s, 'review');
+    const majors = (rv?.data?.issues || []).filter(i => i.severity === 'major');
+    h += `<div class="warn">已達 ${s.config.rounds} 輪上限，仍有未解決的問題，不能視為驗證通過。${majors.length ? '<ul class="issues">' + majors.map(i => `<li><b>#${esc(i.id)}</b> ${esc(i.problem)}</li>`).join('') + '</ul>' : ''}可以「多跑一輪」，或補充資料後再審。</div>`;
+  }
+  h += `<div class="md">${md(s.final)}</div><div class="btns"><button class="primary" onclick="copyFinal('${s.id}')">📋 複製最終版</button><button onclick="exportMD('${s.id}')">⬇️ 匯出 Markdown</button></div></section>`;
+  return h;
+}
+function waitHint(s) {
+  if (RUNNING.has(s.id)) return '';
+  const lr = lastOk(s, 'review');
+  switch (s.status) {
+    case 'need_evidence': {
+      const ev = lr?.data?.evidence_needed || [];
+      return `<div class="warn"><b>審查者需要更多資料才能判斷。</b>${ev.length ? '<ul class="issues">' + ev.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>' : ''}請按「補充資料」，送出後會自動重新審查。</div>`;
+    }
+    case 'disputed': return '<div class="warn"><b>雙方意見分歧，未啟用第三方複審。</b>請在最後一輪審查直接改判，或補充指示後續跑。</div>';
+    case 'needs_decision': return '<div class="warn"><b>AI 回覆的格式無法判讀。</b>請在最後一輪直接改判（通過／需修改），或按「續跑」重試。</div>';
+    case 'paused': return '<div class="warn">已暫停。可以補充資料或指示，再按「續跑」。</div>';
+    case 'error': return '<div class="warn">流程中斷（網路、背景執行或 API 錯誤）。已完成的步驟都有保存，按「續跑」會從中斷處繼續。</div>';
+  }
+  return '';
+}
+function controls(s) {
+  const b = [];
+  if (RUNNING.has(s.id)) b.push(`<button onclick="pauseS('${s.id}')">⏸ 暫停（本步完成後）</button>`);
+  else {
+    const n = nextAction(s);
+    if (n.type !== 'end' && n.type !== 'wait') b.push(`<button class="primary" onclick="resumeS('${s.id}')">▶ 續跑</button>`);
+    if (s.mode === 'relay') {
+      b.push(`<button onclick="noteModal('${s.id}')">📎 補充資料／指示</button>`);
+      if (['passed', 'passed_arbiter', 'unverified'].includes(s.status)) b.push(`<button onclick="moreRound('${s.id}')">🔁 多跑一輪</button>`);
+    }
+    b.push(`<button class="danger" onclick="delS('${s.id}')">🗑 刪除</button>`);
+  }
+  return `<div class="btns">${b.join('')}</div>`;
+}
+function renderDetail() {
+  const s = SESS.get(V.sid); if (!s) return go('history');
+  const t = totals(s), c = s.config;
+  const cfgLine = s.mode === 'relay'
+    ? `主寫 <span class="pv" style="color:${P[c.author].color}">${N(c.author)}</span> → 審查 <span class="pv" style="color:${P[c.reviewer].color}">${N(c.reviewer)}</span>　複審 ${c.arbiter ? `<span class="pv" style="color:${P[c.arbiter].color}">${N(c.arbiter)}</span>` : '不啟用'}　最多 ${c.rounds} 輪`
+    : (s.mode === 'compare' ? '三家獨立回答' : `裁判 <span class="pv" style="color:${P[c.judge].color}">${N(c.judge)}</span>`);
+  let h = `<div class="btns" style="margin-top:0"><button onclick="go('history')">‹ 紀錄</button></div>
+  <section class="card"><h3>${esc(s.title)}</h3>
+    <div style="margin:4px 0">${stBadge(s.status)} <span class="meta">${MODES[s.mode].name}　${fmtDate(s.createdAt)}</span></div>
+    <div class="meta">${cfgLine}</div>
+    <div class="meta">已呼叫 ${t.calls} 次　輸入 ${t.tin} / 輸出 ${t.tout} tokens　費用 ${money(t.c)}</div>
+    <details class="plain"><summary>📝 原始問題與資料</summary><p><b>問題：</b>${esc(s.question).replace(/\n/g, '<br>') || '—'}</p>${s.source ? `<div class="md" style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:8px;max-height:320px;overflow:auto">${md(s.source)}</div>` : ''}${s.images.length ? `<div class="imgs">${s.images.map(u => `<div class="thumb"><img src="${u}" alt=""></div>`).join('')}</div>` : ''}</details>
+    ${controls(s)}
+  </section>`;
+  if (s.current && RUNNING.has(s.id)) h += `<div class="running"><div class="spin"></div><div>${esc(s.current)}<div class="meta">畫面會保持亮著；切到背景可能中斷，回來按「續跑」即可。</div></div></div>`;
+  h += waitHint(s);
+  h += finalCard(s);
+  if (s.mode === 'relay') {
+    const reviews = s.steps.filter(x => x.status === 'ok' && x.type === 'review');
+    const lastRev = reviews[reviews.length - 1];
+    const ok = okSteps(s); const lastMeaning = ok[ok.length - 1];
+    const latest = curDraft(s);
+    h += '<h3 style="margin:16px 4px 8px">過程紀錄</h3>';
+    h += s.steps.map(st => stepCard(s, st, {
+      isLastReview: st === lastRev && lastMeaning === lastRev,
+      isLatestDraft: st === latest && !s.final,
+      defOpen: st === lastRev || st.status === 'error' || st.type === 'note' || (st === latest && !s.final)
+    })).join('') || '<div class="empty">準備中…</div>';
+  } else {
+    const ok = okSteps(s);
+    const tabs = [];
+    if (s.mode !== 'compare') tabs.push(['judge', '⚖️ 裁判總結']);
+    PROVS.forEach(p => tabs.push([p, N(p)]));
+    if (s.mode === 'deep') tabs.push(['cross', '🔍 互審']);
+    if (!V.tab || !tabs.some(x => x[0] === V.tab)) V.tab = tabs[0][0];
+    h += `<div class="tabs">${tabs.map(([k, n]) => `<button class="${V.tab === k ? 'on' : ''}" onclick="V.tab='${k}';renderDetail()">${n}</button>`).join('')}</div>`;
+    let list;
+    if (V.tab === 'judge') list = s.steps.filter(x => x.type === 'judge');
+    else if (V.tab === 'cross') list = s.steps.filter(x => x.type === 'cross');
+    else list = s.steps.filter(x => x.type === 'answer' && x.provider === V.tab);
+    h += list.map(st => stepCard(s, st, { defOpen: true })).join('') || '<div class="empty">尚未產生</div>';
+  }
+  $main().innerHTML = h;
+}
+
+/* ---------- 詳細頁操作 ---------- */
+function resumeS(id) { const s = SESS.get(id); if (s) run(s); }
+function pauseS(id) { PAUSE.add(id); toast('這一步完成後會暫停'); }
+async function override(id, stId, v) {
+  const s = SESS.get(id); const st = s.steps.find(x => x.id === stId);
+  if (!st.originalVerdict) st.originalVerdict = st.verdict;
+  st.verdict = v; s.finalManual = false;
+  await save(s); run(s);
+}
+async function moreRound(id) {
+  const s = SESS.get(id); s.config.rounds++;
+  const ok = okSteps(s); const last = ok[ok.length - 1];
+  if (last && ((last.type === 'review' && last.verdict === 'PASS') || last.type === 'arbitrate')) s.steps.push({ id: uid(), type: 'force', status: 'ok', at: Date.now() });
+  s.finalManual = false;
+  await save(s); run(s);
+}
+async function pickFinal(id, stId) {
+  const s = SESS.get(id); const st = s.steps.find(x => x.id === stId);
+  s.final = content(st); s.finalStepId = st.id; s.finalManual = true;
+  await save(s); renderDetail(); toast('已設為最終版');
+}
+function noteModal(id) {
+  document.getElementById('modal').innerHTML = `<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <h3 style="margin-top:0">📎 補充資料／指示</h3>
+    <p class="hint" style="margin-top:0">會加入之後每一輪的提示中。例如：補上缺的數據、指出某個錯誤、要求審查聚焦某一點。</p>
+    <textarea id="noteTxt" rows="7"></textarea>
+    <div class="btns"><button class="primary" onclick="addNote('${id}')">送出</button><button onclick="closeModal()">取消</button></div></div></div>`;
+  setTimeout(() => document.getElementById('noteTxt')?.focus(), 50);
+}
+function closeModal() { document.getElementById('modal').innerHTML = ''; }
+async function addNote(id) {
+  const t = document.getElementById('noteTxt').value.trim(); if (!t) return toast('請輸入內容');
+  const s = SESS.get(id);
+  s.steps.push({ id: uid(), type: 'note', status: 'ok', text: t, at: Date.now() });
+  closeModal(); await save(s);
+  if (s.status === 'need_evidence') run(s);
+  else { renderDetail(); toast('已加入，按「續跑」或「多跑一輪」時生效'); }
+}
+async function copyFinal(id) {
+  const s = SESS.get(id);
+  try { await navigator.clipboard.writeText(s.final); toast('已複製最終版'); }
+  catch (e) { const ta = document.createElement('textarea'); ta.value = s.final; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('已複製最終版'); }
+}
+function stepText(s, st) {
+  if (st.status === 'error') return `（失敗）${st.error}`;
+  if (st.type === 'review') return st.data ? `判定：${VERD[st.verdict]?.[0]}\n總評：${st.data.summary || ''}\n${fmtIssues(st.data.issues)}` : st.text;
+  if (st.type === 'revise') return `回應：\n${fmtResp(st.data?.responses)}\n\n${st.revised}`;
+  if (st.type === 'arbitrate') return st.data ? `${st.data.summary || ''}\n${fmtRulings(st.data.rulings)}` : st.text;
+  if (st.type === 'force') return '要求再審一輪';
+  return st.text || '';
+}
+function exportMD(id) {
+  const s = SESS.get(id), t = totals(s);
+  let m = `# ${s.title}\n\n- 模式：${MODES[s.mode].name}\n- 時間：${fmtDate(s.createdAt)}\n- 狀態：${(STATUS[s.status] || [s.status])[0]}\n- 費用：${money(t.c)}（${t.calls} 次呼叫）\n\n## 問題\n\n${s.question}\n\n`;
+  if (s.source) m += `## 原始資料\n\n${s.source}\n\n`;
+  if (s.final) m += `## 最終版本\n\n${s.final}\n\n`;
+  m += '## 過程紀錄\n\n' + s.steps.map(st => `### ${stepTitle(s, st)}\n\n${stepText(s, st)}\n`).join('\n');
+  download(m, `AI智囊團_${fmtDate(s.createdAt).replace(/[/: ]/g, '')}.md`, 'text/markdown');
+}
+function download(text, name, type) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type + ';charset=utf-8' }));
+  a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+async function delS(id) {
+  if (!confirm('確定刪除這筆紀錄？')) return;
+  await DB.del(id); SESS.delete(id); go('history');
+}
+
+/* ---------- 設定 ---------- */
+function renderSettings() {
+  const ms = monthStats();
+  $main().innerHTML = PROVS.map(p => {
+    const list = S.lists[p] || [];
+    const opts = list.includes(S.models[p]) || !S.models[p] ? list : [S.models[p], ...list];
+    const modelField = opts.length
+      ? `<select onchange="S.models.${p}=this.value;saveS()"><option value="">— 請選擇 —</option>${opts.map(m => `<option ${m === S.models[p] ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>`
+      : `<input value="${esc(S.models[p])}" placeholder="先按上方按鈕載入，或直接輸入模型名稱" onchange="S.models.${p}=this.value.trim();saveS()">`;
+    return `<section class="card"><h3 style="color:${P[p].color}">${N(p)}</h3>
+      <div class="lbl">API Key</div>
+      <div style="display:flex;gap:8px"><input id="key_${p}" type="password" autocomplete="off" value="${esc(S.keys[p])}" onchange="S.keys.${p}=this.value.trim();saveS()"><button onclick="const i=document.getElementById('key_${p}');i.type=i.type==='password'?'text':'password'">👁</button></div>
+      <div class="btns"><button onclick="loadModels('${p}')">🔌 連線測試並載入模型</button></div>
+      <div class="lbl">模型</div>${modelField}
+      <div class="row"><div><div class="lbl">輸入單價（$／百萬 tokens）</div><input type="number" step="0.01" inputmode="decimal" value="${esc(S.prices[p].in)}" onchange="S.prices.${p}.in=this.value;saveS()"></div>
+      <div><div class="lbl">輸出單價（$／百萬 tokens）</div><input type="number" step="0.01" inputmode="decimal" value="${esc(S.prices[p].out)}" onchange="S.prices.${p}.out=this.value;saveS()"></div></div>
+      <div class="hint">單價請照官方價目表填入所選模型的價格；沒填的話只顯示 token 數，不算金額。</div></section>`;
+  }).join('') + `
+  <section class="card"><h3>💰 本月費用</h3>
+    <table class="tbl">${PROVS.map(p => `<tr><td>${N(p)}</td><td>${money(ms[p])}</td></tr>`).join('')}<tr><td><b>合計</b></td><td>${money(ms.total)}</td></tr></table>
+    ${ms.missing ? '<div class="hint">部分呼叫未填單價，沒有計入金額。</div>' : ''}
+    <div class="lbl">每月預算提醒（USD，0 = 不提醒）</div>
+    <input type="number" inputmode="decimal" value="${S.budget}" onchange="S.budget=+this.value||0;saveS()">
+    <div class="hint">這裡只是提醒。真正的保護是到三家後台設定「硬性」花費上限。</div></section>
+  <section class="card"><h3>🔒 安全說明</h3>
+    <div class="hint" style="margin-top:0">API Key 只存在這支手機的瀏覽器裡，不會寫進程式、GitHub 或備份檔。建議使用這個 App 專用的 Key，並在三家後台各設每月硬性上限。</div></section>
+  <section class="card"><h3>💾 資料備份</h3>
+    <div class="btns"><button onclick="exportAll()">⬇️ 匯出全部紀錄</button><label class="btn">⬆️ 匯入備份<input type="file" accept=".json,application/json" hidden onchange="importAll(this.files[0])"></label></div>
+    <div class="hint">備份檔不含 API Key。</div></section>
+  <div class="empty">My AI Council v${APP_VERSION}</div>`;
+}
+async function loadModels(p) {
+  S.keys[p] = document.getElementById('key_' + p).value.trim(); saveS();
+  toast(`${N(p)} 連線中…`);
+  try {
+    const l = await listModels(p);
+    S.lists[p] = l; if (!S.models[p] && l.length) S.models[p] = l[0];
+    saveS(); renderSettings(); toast(`${N(p)} 連線成功，共 ${l.length} 個模型`);
+  } catch (e) { toast(String(e.message || e)); }
+}
+function exportAll() {
+  const data = { app: 'ai-council', version: APP_VERSION, exportedAt: new Date().toISOString(), sessions: [...SESS.values()] };
+  download(JSON.stringify(data), `AI智囊團_備份_${fmtDate(Date.now()).replace(/[/: ]/g, '')}.json`, 'application/json');
+}
+async function importAll(file) {
+  if (!file) return;
+  try {
+    const d = JSON.parse(await file.text()); const list = d.sessions || [];
+    for (const s of list) { if (s.status === 'running') s.status = 'paused'; SESS.set(s.id, s); await DB.put(s); }
+    toast(`已匯入 ${list.length} 筆`); renderSettings();
+  } catch (e) { toast('匯入失敗：檔案格式不符'); }
+}
+
+/* ===================== 啟動 ===================== */
+(async function init() {
+  document.getElementById('ver').textContent = 'v' + APP_VERSION;
+  await DB.open();
+  for (const s of await DB.all()) { if (s.status === 'running') { s.status = 'error'; s.current = null; await DB.put(s); } SESS.set(s.id, s); }
+  render();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
