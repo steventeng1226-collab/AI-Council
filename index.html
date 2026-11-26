@@ -104,6 +104,22 @@ details.turn>summary .q{font-weight:400;color:#111}
 .mtext{white-space:pre-wrap;font-size:14px;background:#f8fafc;border-radius:6px;padding:6px}
 button.mini{min-height:26px;padding:0 8px;font-size:13px;margin-left:8px}
 .composer{border:2px solid #1d4ed8}
+details.folder{margin-bottom:8px}
+details.folder>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 12px;background:#fff;border:1.5px solid #cbd5e1;border-left:6px solid var(--fc);border-radius:10px;font-weight:700}
+details.folder>summary::-webkit-details-marker{display:none}
+details.folder>summary .fname{flex:1;color:var(--fc)}
+details.folder>summary .fcount{color:#1f2937;font-weight:400}
+details.folder>summary::after{content:"›";font-size:18px;color:#475569}
+details.folder[open]>summary::after{content:"⌄"}
+details.folder .fbody{padding:8px 0 0 14px}
+details.folder.sub>summary{padding:7px 10px;font-weight:600}
+.frow{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #e2e8f0}
+.frow .nm{flex:1}
+.frow.sub .nm{padding-left:22px}
+.dot{width:14px;height:14px;border-radius:50%;display:inline-block;cursor:pointer;flex:0 0 auto}
+.hit{margin-top:6px;padding:6px 8px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;font-size:14px}
+.hit:hover{background:#eff6ff}
+mark{background:#fde68a;color:#111;padding:0 1px}
 @media (min-width:1024px){
   body{padding-bottom:0}
   header{align-items:center;min-height:52px}
@@ -131,7 +147,7 @@ button.mini{min-height:26px;padding:0 8px;font-size:13px;margin-left:8px}
 <script>
 
 'use strict';
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const FENCE = '```';
 
 /* ===================== 基本定義 ===================== */
@@ -320,6 +336,29 @@ function loadS() {
 let S = loadS();
 if (S.last.mode === 'deep') S.last.mode = 'mutual';
 function saveS() { localStorage.setItem('aic_settings', JSON.stringify(S)); }
+
+/* ===================== 資料夾（兩層） ===================== */
+const FCOLORS = ['#b45309', '#1d4ed8', '#0a7d4f', '#7c3aed', '#be123c', '#0e7490', '#475569'];
+if (!Array.isArray(S.folders)) {
+  const mk = (name, color, parent) => ({ id: 'f' + Math.random().toString(36).slice(2, 9), name, color, parent: parent || null });
+  const vn = mk('越南廠經營管理', '#b45309');
+  S.folders = [vn, ...['B/B Ratio 趨勢', '訂單與產能風險', '財務與成本改善', '產銷會議', '主管報告'].map(n => mk(n, null, vn.id)),
+    mk('個人投資研究', '#1d4ed8'), mk('個人成長', '#0a7d4f'), mk('AI 工具與 App 開發', '#7c3aed')];
+  saveS();
+}
+const FOLDER = id => S.folders.find(f => f.id === id);
+const topFolders = () => S.folders.filter(f => !f.parent);
+const subFolders = id => S.folders.filter(f => f.parent === id);
+const fColor = f => (f.parent ? FOLDER(f.parent)?.color : f.color) || '#475569';
+function folderPath(id) { const f = FOLDER(id); if (!f) return ''; const pf = f.parent && FOLDER(f.parent); return pf ? `${pf.name} › ${f.name}` : f.name; }
+function folderSelect(val, onchange) {
+  let o = `<option value="">未分類</option>`;
+  for (const f of topFolders()) {
+    o += `<option value="${f.id}" ${val === f.id ? 'selected' : ''}>📁 ${esc(f.name)}</option>`;
+    for (const c of subFolders(f.id)) o += `<option value="${c.id}" ${val === c.id ? 'selected' : ''}>　　└ ${esc(c.name)}</option>`;
+  }
+  return `<select onchange="${onchange}">${o}</select>`;
+}
 
 /* ===================== IndexedDB ===================== */
 const DB = {
@@ -918,15 +957,19 @@ function makeDigest(tpid) {
 let V = { view: 'topics', tid: null };
 const C = { text: '', images: [], ...structuredClone(DEF.last) };
 Object.assign(C, S.last);
-const NT = { title: '', exec: 'semi' };
+const NT = { title: '', exec: 'semi', folder: '' };
+const Q = { text: '', exec: 'all', open: false };
 const OPEN = {}, TAB = {};
 
 function go(view) { V.view = view; if (view !== 'topic') V.tid = null; render(); window.scrollTo(0, 0); }
-function openTopic(id) {
+function openTopic(id, focus) {
   if (V.tid !== id) PENDING_IMG = null;
+  const tp = TOPICS.get(id);
+  if (focus === 'mat') OPEN['mat_' + id] = true;
+  else if (focus) { for (const x of tp.turns) OPEN['turn_' + x.id] = x.id === focus; }
   V = { view: 'topic', tid: id }; render();
-  const tp = TOPICS.get(id); const last = tp && tp.turns[tp.turns.length - 1];
-  const el = last && document.getElementById('turn_' + last.id);
+  const target = focus === 'mat' ? null : (focus || (tp && tp.turns.length && tp.turns[tp.turns.length - 1].id));
+  const el = target ? document.getElementById('turn_' + target) : (focus === 'mat' ? document.querySelector('.mat') : null);
   if (el) el.scrollIntoView(); else window.scrollTo(0, 0);
 }
 function refresh() { if (V.view === 'topic') renderTopic(); else if (V.view === 'topics') renderTopics(); else if (V.view === 'settings') renderSettings(); }
@@ -948,6 +991,7 @@ function renderNew() {
   setMain(`<div class="newgrid"><div><section class="card">
     <div class="lbl" style="margin-top:0">主題名稱（三家共用）</div>
     <input id="ntTitle" value="${esc(NT.title)}" oninput="NT.title=this.value" placeholder="例如：SMD 負 VM 改善（銀價）">
+    <div class="lbl">資料夾</div>${folderSelect(NT.folder, 'NT.folder=this.value')}
     <div class="lbl">執行方式</div>
     <div class="chips">${Object.entries(EXEC).map(([k, n]) => `<button class="chip ${NT.exec === k ? 'on' : ''}" onclick="NT.exec='${k}';renderNew()">${n}</button>`).join('')}</div>
     <div class="hint">${NT.exec === 'semi'
@@ -959,6 +1003,7 @@ function renderNew() {
 async function createTopic() {
   const title = NT.title.trim(); if (!title) return toast('請輸入主題名稱');
   const tp = newTopic(title, NT.exec);
+  tp.folder = NT.folder || null;
   await save(tp);
   NT.title = '';
   OPEN['set_' + tp.id] = true;
@@ -966,14 +1011,73 @@ async function createTopic() {
 }
 
 /* ---------- 主題列表 ---------- */
+const DONE_ST = ['done', 'passed', 'passed_arbiter'];
+function snippet(text, q) {
+  const t = String(text || ''), i = t.toLowerCase().indexOf(q);
+  if (i < 0) return '';
+  const a = Math.max(0, i - 25), b = Math.min(t.length, i + q.length + 45);
+  return (a > 0 ? '…' : '') + esc(t.slice(a, i)) + '<mark>' + esc(t.slice(i, i + q.length)) + '</mark>' + esc(t.slice(i + q.length, b)) + (b < t.length ? '…' : '');
+}
+function topicHits(tp, q) {
+  const hits = [];
+  if (tp.title.toLowerCase().includes(q)) hits.push({ kind: 'title' });
+  tp.turns.forEach((t, i) => {
+    if ((t.question || '').toLowerCase().includes(q)) hits.push({ kind: 'turn', id: t.id, label: `第 ${i + 1} 問・問題`, snip: snippet(t.question, q) });
+    if ((t.final || '').toLowerCase().includes(q)) hits.push({ kind: 'turn', id: t.id, label: `第 ${i + 1} 問・最終版`, snip: snippet(t.final, q) });
+  });
+  tp.materials.forEach((m, i) => { if ((m.text || '').toLowerCase().includes(q)) hits.push({ kind: 'mat', label: `資料 (${i + 1})`, snip: snippet(m.text, q) }); });
+  BG_FIELDS.forEach(([k, label]) => { if ((tp.bg[k] || '').toLowerCase().includes(q)) hits.push({ kind: 'bg', label: `背景・${label}`, snip: snippet(tp.bg[k], q) }); });
+  return hits;
+}
+function topicItem(tp, q, hits) {
+  const t = topicTotals(tp), last = tp.turns[tp.turns.length - 1];
+  hits = (hits || []).filter(x => x.kind !== 'title');
+  const shown = hits.slice(0, 5);
+  return `<div class="item" onclick="openTopic('${tp.id}')"><div class="t">${q ? snippet(tp.title, q) || esc(tp.title) : esc(tp.title)}</div>
+    ${q && tp.folder && FOLDER(tp.folder) ? `<div class="meta" style="color:${fColor(FOLDER(tp.folder))}">📁 ${esc(folderPath(tp.folder))}</div>` : ''}
+    <div class="meta">${tp.exec === 'semi' ? '半自動' : '自動'}　${tp.turns.length} 問　${tp.materials.length} 份資料　更新 ${fmtDate(tp.updatedAt)}${t.c != null ? '　' + money(t.c) : ''}</div>
+    <div style="margin-top:4px">${last ? stBadge(last.status) : badge('尚未提問', '#475569')}${tp.turns.some(x => imgChecks(x).some(y => y.verdict === 'PASS')) ? ' ' + badge('🖼 圖檔通過', '#0a7d4f') : ''}</div>
+    ${shown.map(x => `<div class="hit" onclick="event.stopPropagation();openTopic('${tp.id}',${x.kind === 'turn' ? `'${x.id}'` : x.kind === 'mat' ? "'mat'" : 'null'})"><b>${esc(x.label)}</b>　${x.snip}</div>`).join('')}
+    ${hits.length > shown.length ? `<div class="meta">還有 ${hits.length - shown.length} 筆符合</div>` : ''}</div>`;
+}
+function newInFolder(fid) { NT.folder = fid; go('new'); }
+function folderTree(list) {
+  const valid = new Set(S.folders.map(f => f.id));
+  const inF = id => list.filter(tp => tp.folder === id);
+  const countTop = f => inF(f.id).length + subFolders(f.id).reduce((a, c) => a + inF(c.id).length, 0);
+  const node = (f, isSub) => {
+    const n = isSub ? inF(f.id).length : countTop(f);
+    const key = 'f_' + f.id, open = OPEN[key] ?? n > 0;
+    const col = fColor(f);
+    let inner = inF(f.id).map(tp => topicItem(tp)).join('');
+    if (!isSub) inner += subFolders(f.id).map(c => node(c, true)).join('');
+    if (!inner) inner = '<div class="meta" style="padding:4px 2px">（沒有主題）</div>';
+    return `<details class="folder ${isSub ? 'sub' : ''}" ${open ? 'open' : ''} ontoggle="OPEN['${key}']=this.open">
+      <summary style="--fc:${col}"><span class="fname">${isSub ? '📂' : '📁'} ${esc(f.name)}</span><span class="fcount">${n}</span>
+      <button class="mini" title="在這個資料夾新增主題" onclick="event.preventDefault();event.stopPropagation();newInFolder('${f.id}')">＋</button></summary>
+      <div class="fbody">${inner}</div></details>`;
+  };
+  let h = topFolders().map(f => node(f, false)).join('');
+  const un = list.filter(tp => !tp.folder || !valid.has(tp.folder));
+  if (un.length) h += `<details class="folder" ${OPEN.f_none ?? true ? 'open' : ''} ontoggle="OPEN['f_none']=this.open"><summary style="--fc:#475569"><span class="fname">🗂 未分類</span><span class="fcount">${un.length}</span></summary><div class="fbody">${un.map(tp => topicItem(tp)).join('')}</div></details>`;
+  return h;
+}
 function renderTopics() {
-  const list = [...TOPICS.values()].sort((a, b) => b.updatedAt - a.updatedAt);
-  setMain(`<div class="btns" style="margin-top:0"><button class="primary" onclick="go('new')">＋ 新主題</button></div>` + (list.length ? list.map(tp => {
-    const t = topicTotals(tp), last = tp.turns[tp.turns.length - 1];
-    return `<div class="item" onclick="openTopic('${tp.id}')"><div class="t">${esc(tp.title)}</div>
-      <div class="meta">${tp.exec === 'semi' ? '半自動' : '自動'}　${tp.turns.length} 問　${tp.materials.length} 份資料　更新 ${fmtDate(tp.updatedAt)}${t.c != null ? '　' + money(t.c) : ''}</div>
-      <div style="margin-top:4px">${last ? stBadge(last.status) : badge('尚未提問', '#475569')}${tp.turns.some(x => imgChecks(x).some(y => y.verdict === 'PASS')) ? ' ' + badge('🖼 圖檔通過', '#0a7d4f') : ''}</div></div>`;
-  }).join('') : '<div class="empty">還沒有主題。按「＋ 新主題」開始。</div>'));
+  const q = Q.text.trim().toLowerCase();
+  let list = [...TOPICS.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+  if (Q.exec === 'semi' || Q.exec === 'auto') list = list.filter(tp => tp.exec === Q.exec);
+  if (Q.exec === 'open') list = list.filter(tp => { const l = tp.turns[tp.turns.length - 1]; return !l || !DONE_ST.includes(l.status); });
+  const hitsOf = new Map();
+  if (q) list = list.filter(tp => { const h = topicHits(tp, q); if (h.length) hitsOf.set(tp.id, h); return h.length; });
+  const filt = [['all', '全部'], ['semi', '半自動'], ['auto', '自動'], ['open', '未完成']];
+  let h = `<div class="btns" style="margin-top:0"><button class="primary" onclick="NT.folder='';go('new')">＋ 新主題</button></div>
+    <section class="card"><input id="qText" type="search" value="${esc(Q.text)}" placeholder="🔍 搜尋主題、問題、資料、最終版…" oninput="Q.text=this.value;renderTopics()">
+    <div class="chips" style="margin-top:8px">${filt.map(([k, n]) => `<button class="chip ${Q.exec === k ? 'on' : ''}" onclick="Q.exec='${k}';renderTopics()">${n}</button>`).join('')}</div>
+    ${q || Q.exec !== 'all' ? `<div class="hint">找到 ${list.length} 個主題</div>` : ''}</section>`;
+  if (q) h += list.length ? list.map(tp => topicItem(tp, q, hitsOf.get(tp.id))).join('') : '<div class="empty">沒有符合的主題。</div>';
+  else if (!TOPICS.size) h += '<div class="empty">還沒有主題。按「＋ 新主題」開始。</div>' + folderTree(list);
+  else h += folderTree(list);
+  setMain(h);
 }
 
 /* ---------- 步驟卡片 ---------- */
@@ -1216,6 +1320,7 @@ function composerCfg() {
 function settingsPanel(tp) {
   const semi = tp.exec === 'semi';
   return `<details class="plain" ${OPEN['set_' + tp.id] ? 'open' : ''} ontoggle="OPEN['set_${tp.id}']=this.open"><summary>⚙️ 主題設定與背景</summary>
+    <div class="lbl">資料夾</div>${folderSelect(tp.folder || '', `setTopic('${tp.id}','folder',this.value||null)`)}
     <div class="lbl">執行方式（之後的新提問適用）</div>
     <div class="chips">${Object.entries(EXEC).map(([k, n]) => `<button class="chip ${tp.exec === k ? 'on' : ''}" onclick="setTopic('${tp.id}','exec','${k}')">${n}</button>`).join('')}</div>
     <div class="lbl">三家的網頁對話網址（半自動用：一鍵開啟對話）</div>
@@ -1260,7 +1365,7 @@ function renderTopic() {
   const tp = TOPICS.get(V.tid); if (!tp) return go('topics');
   const t = topicTotals(tp);
   let h = `<div class="btns" style="margin-top:0"><button onclick="go('topics')">‹ 主題</button></div>
-  <section class="card"><h3>${esc(tp.title)}</h3>
+  <section class="card">${tp.folder && FOLDER(tp.folder) ? `<div class="meta" style="color:${fColor(FOLDER(tp.folder))};font-weight:700">📁 ${esc(folderPath(tp.folder))}</div>` : ''}<h3>${esc(tp.title)}</h3>
     <div class="meta">${tp.exec === 'semi' ? badge('半自動', '#374151') : badge('自動', '#1d4ed8')}　${tp.turns.length} 問　${tp.materials.length} 份資料　${t.c != null ? '費用 ' + money(t.c) : ''}</div>
     ${AUX.has(tp.id) ? `<div class="running"><div class="spin"></div><div>${esc(tp.auxCurrent || '')}</div></div>` : ''}
     ${settingsPanel(tp)}${materialsPanel(tp)}
@@ -1427,6 +1532,7 @@ function renderSettings() {
       <div><div class="lbl">輸出單價（$／百萬 tokens）</div><input type="number" step="0.01" inputmode="decimal" value="${esc(S.prices[p].out)}" onchange="S.prices.${p}.out=this.value;saveS()"></div></div>
       <div class="hint">單價請照官方價目表填入所選模型的價格；沒填的話只顯示 token 數，不算金額。</div></section>`;
   }).join('') + `</div><div>
+  <section class="card"><h3>📁 資料夾</h3>${folderManager()}</section>
   <section class="card"><h3>🧩 輔助 AI</h3>
     <div class="lbl">產生生圖提示詞、圖檔校對、整理前情摘要</div>
     <select onchange="S.imgAI=this.value;saveS()">${PROVS.map(p => `<option value="${p}" ${S.imgAI === p ? 'selected' : ''}>${N(p)}</option>`).join('')}</select></section>
@@ -1453,14 +1559,49 @@ async function loadModels(p) {
     saveS(); renderSettings(); toast(`${N(p)} 連線成功，共 ${l.length} 個模型`);
   } catch (e) { toast(String(e.message || e)); }
 }
+function folderManager() {
+  const row = (f, isSub) => {
+    const sibs = S.folders.filter(x => x.parent === f.parent), i = sibs.indexOf(f);
+    return `<div class="frow ${isSub ? 'sub' : ''}">${isSub ? '' : `<span class="dot" style="background:${f.color}" title="換顏色" onclick="fColorNext('${f.id}')"></span>`}
+      <span class="nm" style="${isSub ? '' : `color:${f.color};font-weight:700`}">${isSub ? '└ ' : ''}${esc(f.name)}</span>
+      <button class="mini" ${i === 0 ? 'disabled' : ''} onclick="fMove('${f.id}',-1)">↑</button><button class="mini" ${i === sibs.length - 1 ? 'disabled' : ''} onclick="fMove('${f.id}',1)">↓</button>
+      <button class="mini" onclick="fRename('${f.id}')">改名</button>${isSub ? '' : `<button class="mini" onclick="fAdd('${f.id}')">＋子類</button>`}
+      <button class="mini danger" onclick="fDel('${f.id}')">刪除</button></div>`;
+  };
+  return topFolders().map(f => row(f, false) + subFolders(f.id).map(c => row(c, true)).join('')).join('') +
+    `<div class="btns"><button onclick="fAdd(null)">＋ 新增大類</button></div><div class="hint">點色點可以換顏色。刪除資料夾時，裡面的主題會移到「未分類」，不會被刪掉。</div>`;
+}
+function fAdd(parent) {
+  const n = prompt(parent ? '子類名稱' : '大類名稱'); if (!n || !n.trim()) return;
+  const f = { id: 'f' + uid(), name: n.trim(), parent: parent || null, color: parent ? null : FCOLORS[topFolders().length % FCOLORS.length] };
+  const sibs = S.folders.filter(x => x.parent === f.parent);
+  const after = sibs.length ? S.folders.indexOf(sibs[sibs.length - 1]) + (parent ? 1 : subFolders(sibs[sibs.length - 1].id).length + 1) : (parent ? S.folders.indexOf(FOLDER(parent)) + 1 : S.folders.length);
+  S.folders.splice(after, 0, f); saveS(); renderSettings();
+}
+function fRename(id) { const f = FOLDER(id); const n = prompt('資料夾名稱', f.name); if (n && n.trim()) { f.name = n.trim(); saveS(); renderSettings(); } }
+function fColorNext(id) { const f = FOLDER(id); f.color = FCOLORS[(FCOLORS.indexOf(f.color) + 1) % FCOLORS.length]; saveS(); renderSettings(); }
+function fMove(id, d) {
+  const f = FOLDER(id), sibs = S.folders.filter(x => x.parent === f.parent), i = sibs.indexOf(f), o = sibs[i + d]; if (!o) return;
+  const ia = S.folders.indexOf(f), ib = S.folders.indexOf(o); S.folders[ia] = o; S.folders[ib] = f; saveS(); renderSettings();
+}
+async function fDel(id) {
+  const f = FOLDER(id), ids = [id, ...subFolders(id).map(c => c.id)];
+  const n = [...TOPICS.values()].filter(tp => ids.includes(tp.folder)).length;
+  if (!confirm(`刪除資料夾「${f.name}」${f.parent ? '' : '（含子類）'}？${n ? `裡面的 ${n} 個主題會移到「未分類」。` : ''}`)) return;
+  S.folders = S.folders.filter(x => !ids.includes(x.id)); saveS();
+  for (const tp of TOPICS.values()) if (ids.includes(tp.folder)) { tp.folder = null; await save(tp); }
+  renderSettings();
+}
 function exportAll() {
-  const data = { app: 'ai-council', version: APP_VERSION, exportedAt: new Date().toISOString(), topics: [...TOPICS.values()] };
+  const data = { app: 'ai-council', version: APP_VERSION, exportedAt: new Date().toISOString(), folders: S.folders, topics: [...TOPICS.values()] };
   download(JSON.stringify(data), `AI_Council_備份_${fmtDate(Date.now()).replace(/[/: ]/g, '')}.json`, 'application/json');
 }
 async function importAll(file) {
   if (!file) return;
   try {
     const d = JSON.parse(await file.text());
+    for (const f of (d.folders || [])) if (!FOLDER(f.id)) S.folders.push(f);
+    saveS();
     const list = (d.topics || []).concat((d.sessions || []).map(migrate));
     for (const tp of list) { for (const t of tp.turns) { if (t.status === 'running') t.status = 'paused'; t.pending = []; } reg(tp); await save(tp); }
     toast(`已匯入 ${list.length} 個主題`); renderSettings();
