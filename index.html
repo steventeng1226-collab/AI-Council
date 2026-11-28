@@ -187,7 +187,7 @@ mark{background:#fde68a;color:#111;padding:0 1px}
 <script>
 
 'use strict';
-const APP_VERSION = '1.13.0';
+const APP_VERSION = '1.14.0';
 const FENCE = '```';
 
 /* ===================== 基本定義 ===================== */
@@ -199,6 +199,7 @@ const P = {
 const PROVS = ['openai', 'anthropic', 'gemini'];
 const N = p => (P[p] ? P[p].name : p);
 const MODES = {
+  quickimg: { name: '⚡ 一頁圖快速', desc: '貼一次資料 → 三家同時回答（順序隨你）→ App 自動組合三家回答給 ChatGPT 做圖 → Claude 對照原始資料檢查圖檔，通過才算完成' },
   mutual:  { name: '互參整合', desc: '三家各自分析 → 互相審查並修正自己的分析 → 主整合者產出驗證報告與最終版（7 次）' },
   relay:   { name: '接力審查', desc: '主寫 → 審查 → 依意見修正，自動來回，直到通過或達到輪數上限' },
   compare: { name: '三方比較', desc: '三家各自獨立回答，並排查看（3 次）' },
@@ -230,7 +231,7 @@ const VERD = {
 };
 const AUX_TYPES = ['note', 'imgprompt', 'imgcheck'];
 const ERR_TYPE = { text: '文字', number: '數字', missing: '遺漏', extra: '多餘', layout: '版面' };
-const STEP_LABEL = { answer: '① 各自分析', refine: '② 審查另外兩家並修正', integrate: '③ 驗證報告與最終版', draft: '主寫第 1 版', review: '審查', revise: '依審查意見修正', arbitrate: '第三方複審', judge: '裁判總結', cross: '互審', imgcheck: '圖檔校對', tclean: '整理逐字稿', tverify: '核對整理稿', tfix: '依核對意見修正整理稿' };
+const STEP_LABEL = { answer: '① 各自分析', refine: '② 審查另外兩家並修正', integrate: '③ 驗證報告與最終版', draft: '主寫第 1 版', review: '審查', revise: '依審查意見修正', arbitrate: '第三方複審', judge: '裁判總結', cross: '互審', imgcheck: '圖檔校對', imgdraft: '🎨 做圖：貼到 ChatGPT（附上原圖）', tclean: '整理逐字稿', tverify: '核對整理稿', tfix: '依核對意見修正整理稿' };
 const BG_FIELDS = [['openai', 'ChatGPT 對話的交接摘要'], ['anthropic', 'Claude 對話的交接摘要'], ['gemini', 'Gemini 對話的交接摘要'], ['user', '你的補充說明']];
 
 /* ===================== 提示詞 ===================== */
@@ -379,6 +380,14 @@ const TFIX_SYS = `你是整理稿的作者，現在依核對意見修正。用�
 ## ⭐ 最終版
 （修正後的完整整理稿，照原本五個標題：一句話結論、重點、關鍵數字、決議與待辦、❓待確認）`;
 
+const QIMG_SYS = `請根據下面三位 AI 對同一份資料的分析，做一張直式資訊圖。用繁體中文。
+先比對三家：以原始資料為準；三家說法不一致、或沒有出處的數字，不要放進圖裡，改列在最後的「未放入圖的項目」。
+依序輸出：
+1. 「圖上文字」：逐字列出圖上要出現的所有標題、數字、標籤、結論句（之後會用這段校對圖片）。
+2. 直接生成圖片：圖上文字必須和第 1 段完全一致。
+3. 「未放入圖的項目」：三家不一致或待查證的內容（沒有就寫「無」）。
+做圖規格：
+${IMG_RULES}`;
 const HANDOFF_PROMPT = `請為這個對話寫一份「交接摘要」，我要轉到另一個工具繼續討論。用繁體中文，照以下格式：
 1. 主題與核心問題（要回答誰、回答什麼）
 2. 已提供的資料清單（截圖、逐字稿、報表各是什麼內容）
@@ -415,7 +424,7 @@ const DEF = {
   judgeRot: 0,
   imgAI: 'anthropic',
   sync: { url: '', token: '', auto: true, last: 0, err: '' },
-  last: { mode: 'mutual', author: 'openai', reviewer: 'anthropic', arbiter: 'gemini', rounds: 3, judge: 'rotate', lead: 'anthropic', template: '', single: 'anthropic', tlead: 'anthropic', tcheck: false, tsrc: 'Gemini 筆記本' }
+  last: { qpages: 1, mode: 'mutual', author: 'openai', reviewer: 'anthropic', arbiter: 'gemini', rounds: 3, judge: 'rotate', lead: 'anthropic', template: '', single: 'anthropic', tlead: 'anthropic', tcheck: false, tsrc: 'Gemini 筆記本' }
 };
 function deepMerge(a, b) {
   for (const k in b) {
@@ -563,6 +572,7 @@ function money(x) { return x == null ? '—' : '$' + x.toFixed(x < 0.1 ? 4 : 2);
 function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => t.style.display = 'none', 2600); }
 function badge(label, color) { return `<span class="badge" style="background:${color}">${esc(label)}</span>`; }
 function stBadge(st) { const x = STATUS[st] || [st, '#374151']; return badge(x[0], x[1]); }
+const turnBadge = s => (s.status === 'running' && (s.pending || []).length) ? badge('✋ 等你貼回', '#b45309') : stBadge(s.status);
 function calcCost(p, tin, tout) {
   const pr = S.prices[p] || {}; const a = parseFloat(pr.in), b = parseFloat(pr.out);
   if (isNaN(a) || isNaN(b)) return null;
@@ -797,7 +807,7 @@ function ctxSemi(t, p) {
   return u + `【這一問】\n${t.question || '（請依資料分析）'}` + notesOf(t);
 }
 const tplText = t => (t.tplFocus ? `\n\n【這次的審查重點：${t.tplName}】\n${t.tplFocus}` : '');
-const ctx = (t, p) => (t.exec === 'semi' ? ctxSemi(t, p) : ctxAuto(t)) + tplText(t);
+const ctx = (t, p) => (t.exec === 'semi' ? ctxSemi(t, p) : ctxAuto(t)) + carryText(t, p) + tplText(t);
 const allImages = t => topicOf(t).materials.flatMap(m => m.images);
 
 function fmtIssues(a) { if (!a || !a.length) return '（無）'; return a.map(i => `#${i.id} [${i.severity === 'major' ? '重大' : '次要'}] ${i.problem || ''}${i.suggestion ? `\n   建議：${i.suggestion}` : ''}`).join('\n'); }
@@ -834,6 +844,12 @@ function nextMulti(s) {
   const has = (type, p) => ok.some(x => x.type === type && (!p || x.provider === p));
   const cnt = (type, p) => ok.filter(x => x.type === type && (!p || x.provider === p)).length;
   if (s.mode === 'single') { const p = s.config.single; return has('answer', p) ? { type: 'end', status: 'done' } : { type: 'answers', list: [p] }; }
+  if (s.mode === 'quickimg') {
+    const mq = PROVS.filter(p => !has('answer', p));
+    if (mq.length) return { type: 'answers', list: mq };
+    if (!has('imgdraft')) return { type: 'imgdraft' };
+    return { type: 'end', status: imgPassed(s) ? 'done' : 'img_pending' };
+  }
   if (s.mode === 'transcript') {
     const lead = s.config.lead || 'anthropic';
     if (!has('tclean')) return { type: 'tclean' };
@@ -923,7 +939,22 @@ function judgePrompt(s) {
 
 /* ---------- 逐字稿 → 一頁圖 ---------- */
 const tMat = s => topicOf(s).materials.find(m => m.id === s.transcriptId) || null;
-const imgAIOf = s => (s.mode === 'transcript' ? 'anthropic' : S.imgAI);
+const imgReq = s => s.mode === 'transcript' || s.mode === 'quickimg';
+const imgAIOf = s => (imgReq(s) ? 'anthropic' : S.imgAI);
+function qimgPrompt(s) {
+  const tp = topicOf(s);
+  let u = `【主題】${tp.title}\n\n【這次要做的圖】\n${s.question || '把資料的重點做成一頁圖'}\n\n【頁數】${pagesRule(s.imgPages || 1)}`;
+  PROVS.forEach(p => { u += `\n\n【${N(p)} 的分析】\n${ansOf(s, p)}`; });
+  u += notesOf(s) + tplText(s);
+  return u + '\n\n（原始資料的圖片會接著貼上；如果這個對話前面已經有，以前面的為準。）\n請依規定的三個部分輸出，並直接生成圖片。';
+}
+function carryText(t, p) {
+  if (!t.carry) return '';
+  const prev = T(t.carry); if (!prev) return '';
+  const list = PROVS.filter(q => !(t.exec === 'semi' && q === p)).map(q => [q, (okSteps(prev).filter(x => x.type === 'answer' && x.provider === q).pop() || {}).text]).filter(x => x[1]);
+  if (!list.length) return '';
+  return `\n\n【上一問（第 ${turnNo(prev)} 問）${t.exec === 'semi' ? '另外兩家' : '三家'}的回答】` + list.map(([q, x]) => `\n【${N(q)}】\n${x}`).join('\n');
+}
 const imgPassed = s => s.steps.some(x => x.type === 'imgcheck' && x.status === 'ok' && (x.verdict === 'PASS' || x.accepted));
 function tBase(s, p, withT) {
   const tp = topicOf(s), m = tMat(s);
@@ -989,7 +1020,7 @@ function cancelPending(tid) {
 async function step(s, p, system, user, meta) {
   const t0 = Date.now();
   try {
-    const r = s.exec === 'semi' ? await manualReply(s, p, system, user, meta)
+    const r = (s.exec === 'semi' || meta.manual) ? await manualReply(s, p, system, user, meta)
                                 : await callAI(p, system, user, meta.images ?? allImages(s));
     const st = { id: uid(), type: meta.type, provider: p, model: r.manual ? '網頁版（手動貼回）' : S.models[p], round: meta.round, text: r.text, tin: r.tin, tout: r.tout, cost: r.manual ? null : calcCost(p, r.tin, r.tout), ms: Date.now() - t0, status: 'ok', at: Date.now(), manual: !!r.manual };
     if (meta.extra) Object.assign(st, meta.extra);
@@ -1050,6 +1081,9 @@ async function exec(s, a) {
     case 'judge':
       setCur(`${N(c.judge)} 裁判總結`);
       return step(s, c.judge, JUDGE_SYS, judgePrompt(s), { type: 'judge' });
+    case 'imgdraft':
+      s.current = '✋ 等你貼到 ChatGPT 做圖，再把它列出的「圖上文字」貼回來'; refresh();
+      return step(s, 'openai', QIMG_SYS, qimgPrompt(s), { type: 'imgdraft', images: allImages(s), manual: true });
     case 'tclean': {
       const lead = c.lead || 'anthropic';
       setCur(`📝 ${N(lead)} 整理逐字稿`);
@@ -1074,6 +1108,7 @@ function finalize(s) {
   if (s.finalManual) return;
   if (s.mode === 'relay') { const d = curDraft(s); if (d) { s.final = content(d); s.finalStepId = d.id; } }
   else if (s.mode === 'single') { const a = lastOf(s, 'answer'); if (a) { s.final = a.text; s.report = ''; s.finalStepId = a.id; } }
+  else if (s.mode === 'quickimg') { const d = lastOf(s, 'imgdraft'); if (d) { s.final = d.text; s.report = ''; s.finalStepId = d.id; } }
   else if (s.mode === 'transcript') {
     const f = lastOf(s, 'tfix'), cl = lastOf(s, 'tclean');
     const vs = okSteps(s).filter(x => x.type === 'tverify');
@@ -1102,7 +1137,7 @@ function keysOK(list) {
   if (miss.length) { toast(`請先到設定填好 ${miss.map(N).join('、')} 的 Key 與模型`); return false; }
   return true;
 }
-const needProvs = (c, mode) => (mode === 'relay' ? [c.author, c.reviewer, c.arbiter].filter(Boolean) : mode === 'single' ? [c.single] : mode === 'transcript' ? (c.tcheck ? PROVS : [c.lead || 'anthropic']) : PROVS);
+const needProvs = (c, mode) => mode === 'quickimg' ? (c.carried ? [] : PROVS) : (mode === 'relay' ? [c.author, c.reviewer, c.arbiter].filter(Boolean) : mode === 'single' ? [c.single] : mode === 'transcript' ? (c.tcheck ? PROVS : [c.lead || 'anthropic']) : PROVS);
 
 async function run(s) {
   if (RUNNING.has(s.id) || AUX.has(s.id)) return;
@@ -1164,22 +1199,24 @@ function checkImg(id) {
   const ip = imgPrompt(s);
   const tp = topicOf(s);
   const tm = s.mode === 'transcript' ? tMat(s) : null;
-  const src = tm ? `（以下是原逐字稿）\n${tm.text.slice(0, 60000)}` : [s.question ? `問題：${s.question}` : '', ...tp.materials.map((m, i) => m.text ? `(${i + 1}) ${m.text}` : ''), tp.digest ? `前情摘要：${tp.digest.text}` : ''].filter(Boolean).join('\n').slice(0, 12000);
+  const qa = s.mode === 'quickimg' ? PROVS.map(p => `【${N(p)} 的分析】\n${ansOf(s, p).slice(0, 4000)}`).join('\n\n') : '';
+  const src = tm ? `（以下是原逐字稿）\n${tm.text.slice(0, 60000)}` : [s.question ? `問題：${s.question}` : '', ...tp.materials.map((m, i) => m.text ? `(${i + 1}) ${m.text}` : ''), tp.digest ? `前情摘要：${tp.digest.text}` : ''].filter(Boolean).join('\n').slice(0, 12000) + (qa ? `\n\n（三家對原始資料的分析，供交叉比對）\n${qa}` : '');
   let u = `【原始資料】\n${src || '（沒有文字資料，原始資料是圖片或在網頁對話中）'}\n\n【最終版內容】${tm ? '（整理稿）' : ''}\n${s.final}`;
+  if (s.mode === 'quickimg') u += `\n\n（補充規則：【最終版內容】是 ChatGPT 列出的「圖上文字」；其中「未放入圖的項目」本來就不該出現在圖上。數字一律以原始資料${s.exec === 'semi' ? '（前面對話中的截圖）' : '（附圖中前面幾張）'}為準。）`;
   if (tm) u += '\n\n（補充規則：整理稿「❓待確認」的項目本來就不該出現在圖上；若圖上把它當成確定的數字或事實，列入 errors。圖上的數字也要對照原逐字稿。）';
   if (ip && !ip.template) u += `\n\n【生圖指令】\n${ip.text}`;
   if (prevOk?.data) u += `\n\n【上一張的錯誤清單】\n${fmtImgErrs(prevOk.data.errors)}`;
   u += `\n\n${s.exec === 'semi' ? '我接著貼上的圖' : '附圖'}是第 ${n} 張，請逐字逐數字校對，只輸出 JSON。`;
   const semi = s.exec === 'semi', ck = imgAIOf(s);
   runAux(s, semi ? `✋ 等你把 ${N(ck)} 的校對結果貼回來（第 ${n} 張）` : `${N(ck)} 校對第 ${n} 張圖…`, async () => {
-    await step(s, ck, IMGCHECK_SYS, u, { type: 'imgcheck', images: [img], label: `圖檔校對第 ${n} 張`, extra: { image: img, num: n }, post: st => {
+    await step(s, ck, IMGCHECK_SYS, u, { type: 'imgcheck', images: (s.mode === 'quickimg' && !semi) ? [...allImages(s), img] : [img], label: `圖檔校對第 ${n} 張`, extra: { image: img, num: n }, post: st => {
       st.data = parseJSON(st.text);
       const d = st.data, v = String(d?.verdict || '').toUpperCase();
       st.verdict = !d ? 'UNKNOWN' : ((d.errors || []).length || (d.unreadable || []).length) ? 'REVISE' : (d.uncertain || []).length ? 'CHECK' : v === 'PASS' ? 'PASS' : v === 'REVISE' ? 'REVISE' : 'UNKNOWN';
     } });
     const last = s.steps[s.steps.length - 1];
     if (last && last.type === 'imgcheck' && last.status === 'ok') PENDING_IMG = null;
-    if (s.mode === 'transcript' && !RUNNING.has(s.id) && ['done', 'img_pending'].includes(s.status)) s.status = imgPassed(s) ? 'done' : 'img_pending';
+    if (imgReq(s) && !RUNNING.has(s.id) && ['done', 'img_pending'].includes(s.status)) s.status = imgPassed(s) ? 'done' : 'img_pending';
   }, semi, ck);
 }
 async function acceptImg(tid, sid) {
@@ -1322,7 +1359,7 @@ function topicItem(tp, q, hits) {
     ${tagsOf(tp).length || chatLinks(tp) ? `<div class="tagrow">${tagChips(tp)}${chatLinks(tp)}</div>` : ''}
     ${(q || Q.tag) && tp.folder && FOLDER(tp.folder) ? `<div class="meta" style="color:${fColor(FOLDER(tp.folder))}">📁 ${esc(folderPath(tp.folder))}</div>` : ''}
     <div class="meta">${tp.archive ? `📜 匯入自 ${N(tp.archive.source)}（${tp.archive.msgs.length} 則）　` : ''}${tp.exec === 'semi' ? '半自動' : '自動'}　${tp.turns.length} 問　${tp.materials.length} 份資料　更新 ${fmtDate(tp.updatedAt)}${t.c != null ? '　' + money(t.c) : ''}</div>
-    <div style="margin-top:4px">${last ? stBadge(last.status) : tp.archive ? '' : badge('尚未提問', '#475569')}${tp.turns.some(x => imgChecks(x).some(y => y.verdict === 'PASS')) ? ' ' + badge('🖼 圖檔通過', '#0a7d4f') : ''}</div>
+    <div style="margin-top:4px">${last ? turnBadge(last) : tp.archive ? '' : badge('尚未提問', '#475569')}${tp.turns.some(x => imgChecks(x).some(y => y.verdict === 'PASS')) ? ' ' + badge('🖼 圖檔通過', '#0a7d4f') : ''}</div>
     ${shown.filter(x => x.kind !== 'tag').map(x => `<div class="hit" onclick="event.stopPropagation();openTopic('${tp.id}',${x.kind === 'turn' ? `'${x.id}'` : x.kind === 'mat' ? "'mat'" : x.kind === 'arc' ? "'arc'" : 'null'})"><b>${esc(x.label)}</b>　${x.snip}</div>`).join('')}
     ${hits.length > shown.length ? `<div class="meta">還有 ${hits.length - shown.length} 筆符合</div>` : ''}</div>`;
 }
@@ -1386,6 +1423,7 @@ function stepTitle(s, st) {
     case 'judge': return `裁判總結 · ${n}`;
     case 'imgprompt': return `生圖提示詞 · ${st.template ? '範本' : n}`;
     case 'imgcheck': return `圖檔校對第 ${st.num || '?'} 張 · ${n}`;
+    case 'imgdraft': return `🎨 做圖（圖上文字）· ${n}`;
     case 'tclean': return `📝 整理稿 · ${n}`;
     case 'tverify': return `🔎 ${n} 核對整理稿`;
     case 'tfix': return `✏️ 依核對意見修正 · ${n}`;
@@ -1435,8 +1473,8 @@ function stepCard(s, st, opts = {}) {
   else if (st.type === 'note') body = `<p>${esc(st.text).replace(/\n/g, '<br>')}</p>`;
   else if (st.type === 'force') body = '<p>已追加一輪審查。</p>';
   else body = `<div class="md">${md(st.text)}</div>`;
-  const canRerun = ['draft', 'review', 'revise', 'arbitrate', 'answer', 'refine', 'cross', 'judge', 'integrate', 'tclean', 'tverify', 'tfix'].includes(st.type) && !RUNNING.has(s.id) && !AUX.has(s.id);
-  const pickable = ['draft', 'revise', 'answer', 'refine', 'judge', 'integrate', 'tclean', 'tfix'];
+  const canRerun = ['draft', 'review', 'revise', 'arbitrate', 'answer', 'refine', 'cross', 'judge', 'integrate', 'tclean', 'tverify', 'tfix', 'imgdraft'].includes(st.type) && !RUNNING.has(s.id) && !AUX.has(s.id);
+  const pickable = ['draft', 'revise', 'answer', 'refine', 'judge', 'integrate', 'tclean', 'tfix', 'imgdraft'];
   if (st.status === 'ok' && (pickable.includes(st.type) || canRerun)) body += `<div class="btns">${pickable.includes(st.type) ? `<button onclick="pickFinal('${s.id}','${st.id}')">${s.finalStepId === st.id ? '⭐ 目前的最終版' : '☆ 選為最終版'}</button>` : ''}${canRerun ? `<button onclick="rerunStep('${s.id}','${st.id}')">🔄 重跑這一步</button>` : ''}</div>`;
   const open = OPEN[st.id] ?? !!opts.defOpen;
   return `<details class="step" style="--c:${color}" ${open ? 'open' : ''} ontoggle="OPEN['${st.id}']=this.open"><summary>${esc(title)} ${extra}</summary><div class="body">${stepMeta(st)}${body}</div></details>`;
@@ -1477,7 +1515,7 @@ function finalCard(s) {
   if (!s.final) return '';
   const bad = s.status === 'unverified' || s.status === 'disputed';
   const src = s.steps.find(x => x.id === s.finalStepId);
-  let h = `<section class="card final ${bad ? 'bad' : ''}"><h3>${bad ? '⚠️ 目前版本（尚未通過驗證）' : s.report ? '✅ 驗證結果' : '⭐ 最終版本'}${s.finalManual ? '（你選定）' : ''}</h3>`;
+  let h = `<section class="card final ${bad ? 'bad' : ''}"><h3>${s.mode === 'quickimg' ? '🖼 圖上文字（ChatGPT 做圖）' : bad ? '⚠️ 目前版本（尚未通過驗證）' : s.report ? '✅ 驗證結果' : '⭐ 最終版本'}${s.finalManual ? '（你選定）' : ''}</h3>`;
   if (src && src.provider) h += `<div class="meta">來源：${esc(stepTitle(s, src))}</div>`;
   if (s.status === 'unverified') {
     const rv = lastOk(s, 'review');
@@ -1508,9 +1546,10 @@ function imgSection(s) {
   else h += `<div class="btns"><button class="primary" ${busy ? 'disabled' : ''} onclick="genImgPrompt('${s.id}')">🎨 產生生圖提示詞</button></div><div class="hint">${s.exec === 'semi' ? '用固定範本把最終版包成生圖指令（不需呼叫 AI）。' : `由 ${N(S.imgAI)} 根據最終版，逐字列出圖上要出現的文字與數字。`}</div>`;
   const ipErr = s.steps.filter(x => x.type === 'imgprompt' && x.status === 'error').pop();
   if (ipErr && !ip) h += `<div class="warn">${esc(ipErr.error)}</div>`;
+  if (s.mode === 'quickimg') h = '<section class="card"><h3>🖼 一頁圖檔</h3><div class="hint" style="margin-top:0">圖已經在 ChatGPT 畫好：在圖上按右鍵「複製圖片」（手機長按圖片），回這裡貼上，再按「開始校對」。</div>';
   const ck = imgAIOf(s);
-  h += `<div class="lbl">② 圖檔校對（${N(ck)} 對照${s.mode === 'transcript' ? '原逐字稿與整理稿' : '原始資料與最終版'}，逐項比對）</div>`;
-  if (s.mode === 'transcript') h += imgPassed(s) ? '<div class="good">✅ Claude 已檢查通過，這一問完成。</div>' : '<div class="warn">🖼 這一步是固定步驟：把 ChatGPT 做好的圖貼上，<b>Claude 檢查通過</b>後，這一問才會標記「完成」。</div>';
+  h += `<div class="lbl">② 圖檔校對（${N(ck)} 對照${s.mode === 'transcript' ? '原逐字稿與整理稿' : s.mode === 'quickimg' ? '原始資料、三家分析與圖上文字' : '原始資料與最終版'}，逐項比對）</div>`;
+  if (imgReq(s)) h += imgPassed(s) ? '<div class="good">✅ Claude 已檢查通過，這一問完成。</div>' : '<div class="warn">🖼 這一步是固定步驟：把 ChatGPT 做好的圖貼上，<b>Claude 檢查通過</b>後，這一問才會標記「完成」。</div>';
   const oks = imgChecks(s).filter(x => x.status === 'ok');
   imgChecks(s).forEach(st => {
     if (st.status === 'error') { h += `<div class="warn">第 ${st.num || '?'} 張校對失敗：${esc(st.error)}</div>`; return; }
@@ -1526,7 +1565,7 @@ function imgSection(s) {
       if (nU) b += `<div class="lbl">？ 待確認</div><ul class="issues">${d.uncertain.map(x => `<li><b>${esc(x.location)}</b>：${esc(x.content)}<br><span class="meta">${esc(x.reason)}</span></li>`).join('')}</ul>`;
       if (nR) b += `<div class="lbl">◌ 無法辨識</div><ul class="issues">${d.unreadable.map(x => `<li><b>${esc(x.location)}</b>：${esc(x.reason)}</li>`).join('')}</ul>`;
       if (st.verdict === 'PASS') b += '<div class="good">✅ 這張圖校對通過，可以使用。</div>';
-      else if (st.verdict === 'CHECK') b += `<div class="warn">沒有找到錯誤，但有待確認的項目（多半是最終版和原始資料不一致）。請先確認這些地方，再決定是否使用。</div>${s.mode === 'transcript' ? (st.accepted ? '<div class="good">✔ 你已確認，這張圖可以使用。</div>' : `<div class="btns"><button onclick="acceptImg('${s.id}','${st.id}')">✔ 待確認的都確認過了，標記完成</button></div>`) : ''}`;
+      else if (st.verdict === 'CHECK') b += `<div class="warn">沒有找到錯誤，但有待確認的項目（多半是最終版和原始資料不一致）。請先確認這些地方，再決定是否使用。</div>${imgReq(s) ? (st.accepted ? '<div class="good">✔ 你已確認，這張圖可以使用。</div>' : `<div class="btns"><button onclick="acceptImg('${s.id}','${st.id}')">✔ 待確認的都確認過了，標記完成</button></div>`) : ''}`;
       else if (nR && !nE) b += '<div class="warn">有看不清楚的地方，不能判定通過。請要 ChatGPT 把這些文字放大、加粗後再生一次。</div>';
       else if (isSmallFix(d)) b += `<div class="warn">💡 只剩 ${d.errors.length} 處文字／數字小錯。<b>建議不要再整張重生</b>：把這張圖和錯誤清單交給 Claude 對話做局部修補，避免 ChatGPT 改出新的錯誤。</div>`;
       if (d.fix_prompt && st.verdict !== 'PASS') b += `<div class="lbl">給 ChatGPT 的修正指令</div><div class="copybox">${esc(d.fix_prompt)}</div><div class="btns"><button class="primary" onclick="${copyOpenGpt(`T('${s.id}').steps.find(x=>x.id==='${st.id}').data.fix_prompt`, '已複製修正指令，到 ChatGPT 貼上')}">📋 複製修正指令${gptUrl ? '並開啟 ChatGPT' : ''}</button><button onclick="copyText(fmtImgErrs(T('${s.id}').steps.find(x=>x.id==='${st.id}').data.errors),'已複製錯誤清單')">📋 複製錯誤清單</button></div>`;
@@ -1564,6 +1603,11 @@ function progItems(s) {
       for (let r = 1; r <= rounds; r++) { PROVS.forEach(p => add(`② 審查修正${rounds > 1 ? `（第 ${r} 輪）` : ''}`, 'refine', p, r)); add(`③ 整合${rounds > 1 ? `（第 ${r} 輪）` : ''}`, 'integrate', c.lead, r); }
       break;
     }
+    case 'quickimg':
+      PROVS.forEach(p => add('回答', 'answer', p));
+      add('做圖', 'imgdraft', 'openai');
+      items.push({ label: '檢查圖檔', p: 'anthropic', st: imgPassed(s) ? 'ok' : pend.some(x => x.type === 'imgcheck') ? 'wait' : 'todo' });
+      break;
     case 'transcript': {
       const lead = c.lead || 'anthropic';
       add('整理逐字稿', 'tclean', lead);
@@ -1588,7 +1632,7 @@ function progItems(s) {
 }
 function progressPanel(s) {
   if (s.mode === 'deep') return '';
-  const fin = s.mode === 'transcript' ? s.status === 'done' : ['done', 'passed', 'passed_arbiter', 'unverified'].includes(s.status);
+  const fin = imgReq(s) ? s.status === 'done' : ['done', 'passed', 'passed_arbiter', 'unverified'].includes(s.status);
   if (fin) return '';
   const items = progItems(s); if (!items.length) return '';
   const done = items.filter(x => x.st === 'ok' || x.st === 'skip').length;
@@ -1596,6 +1640,7 @@ function progressPanel(s) {
   let nx = '';
   if (pend.length) nx = pend.map(x => `✋ 到 <b style="color:${P[x.provider].color}">${N(x.provider)}</b> 貼上「${esc(x.label || STEP_LABEL[x.type] || '')}」的訊息，再把回覆貼回下面`).join('<br>');
   else if (RUNNING.has(s.id) || AUX.has(s.id)) nx = `⏳ ${esc(s.current || s.auxCurrent || '執行中')}`;
+  else if (s.mode === 'quickimg' && s.final && s.status === 'img_pending') nx = '👉 把 ChatGPT 畫好的圖貼到下方「② 圖檔校對」，按「開始校對」，再照卡片貼給 Claude';
   else if (s.mode === 'transcript' && s.final && s.status === 'img_pending') nx = !imgPrompt(s) ? '👉 按下方「🎨 產生生圖提示詞」，貼到 ChatGPT 生圖' : '👉 把 ChatGPT 做好的圖貼到下方「② 圖檔校對」，讓 Claude 檢查';
   else if (['need_evidence', 'disputed', 'needs_decision'].includes(s.status)) nx = '👉 需要你決定，請看下面的說明';
   else { const n = nextAction(s); if (n.type !== 'end' && n.type !== 'wait') nx = '👉 按「▶ 續跑」繼續下一步'; }
@@ -1680,12 +1725,13 @@ function turnBlock(s, isLast) {
     : s.mode === 'single' ? `只問 ${pv(c.single)}`
     : s.mode === 'mutual' ? `三家各自分析 → 互相審查修正 → 主整合 ${pv(c.lead)}`
     : s.mode === 'compare' ? '三家獨立回答'
+    : s.mode === 'quickimg' ? `三家回答${c.carried ? `（沿用第 ${turnNo(T(s.carry)) || '?'} 問）` : ''} → ${pv('openai')} 做圖 → ${pv('anthropic')} 檢查`
     : s.mode === 'transcript' ? `整理 ${pv(c.lead || 'anthropic')}　${c.tcheck ? `${PROVS.filter(p => p !== (c.lead || 'anthropic')).map(pv).join('、')} 核對` : '不做三方核對'}　圖檔由 ${pv('anthropic')} 檢查`
     : `裁判 ${pv(c.judge)}`;
   const t = totals(s);
   const open = OPEN['turn_' + s.id] ?? isLast;
   let h = `<details class="turn" id="turn_${s.id}" ${open ? 'open' : ''} ontoggle="OPEN['turn_${s.id}']=this.open">
-    <summary><span>第 ${n} 問</span> ${stBadge(s.status)} <span class="q">${esc((s.question || '（依資料分析）').split('\n')[0].slice(0, 60))}</span></summary><div class="tbody">
+    <summary><span>第 ${n} 問</span> ${turnBadge(s)} <span class="q">${esc((s.question || '（依資料分析）').split('\n')[0].slice(0, 60))}</span></summary><div class="tbody">
     <div class="meta">${(MODES[s.mode] || { name: s.mode }).name}・${s.exec === 'semi' ? '半自動' : '自動'}${s.tplName ? '　' + badge('🧭 ' + s.tplName, '#0e7490') : ''}　${cfgLine}</div>
     <div class="meta">${fmtDate(s.at)}　${s.exec === 'semi' ? `已貼回 ${t.manual} 次` : `已呼叫 ${t.calls} 次　輸入 ${t.tin} / 輸出 ${t.tout} tokens　費用 ${money(t.c)}`}</div>
     ${(s.question || '').includes('\n') ? `<details class="plain"><summary>完整問題</summary><p>${esc(s.question).replace(/\n/g, '<br>')}</p></details>` : ''}
@@ -1694,7 +1740,7 @@ function turnBlock(s, isLast) {
   if (cur) h += `<div class="running">${s.exec === 'semi' ? '' : '<div class="spin"></div>'}<div>${esc(cur)}${s.exec === 'semi' ? '' : '<div class="meta">畫面會保持亮著；切到背景可能中斷，回來按「續跑」即可。</div>'}</div></div>`;
   h += progressPanel(s) + pendingCards(s);
   h += waitHint(s) + finalCard(s) + imgSection(s);
-  h += `<details class="plain" ${OPEN['proc_' + s.id] ?? !s.final ? 'open' : ''} ontoggle="OPEN['proc_${s.id}']=this.open"><summary>🧾 過程紀錄</summary>${s.mode === 'relay' ? relayProcess(s) : (s.mode === 'single' || s.mode === 'transcript') ? s.steps.filter(x => !AUX_TYPES.includes(x.type)).map(st => stepCard(s, st, { defOpen: true })).join('') : multiProcess(s)}</details>`;
+  h += `<details class="plain" ${OPEN['proc_' + s.id] ?? !s.final ? 'open' : ''} ontoggle="OPEN['proc_${s.id}']=this.open"><summary>🧾 過程紀錄</summary>${s.mode === 'relay' ? relayProcess(s) : (s.mode === 'single' || s.mode === 'transcript' || s.mode === 'quickimg') ? s.steps.filter(x => !AUX_TYPES.includes(x.type)).map(st => stepCard(s, st, { defOpen: true })).join('') : multiProcess(s)}</details>`;
   return h + '</div></details>';
 }
 
@@ -1710,6 +1756,8 @@ function composerCfg() {
       ${C.author === C.reviewer ? '<div class="hint"><b style="color:#b91c1c">⚠️ 主寫和審查不能是同一家</b></div>' : ''}`;
   if (m === 'mutual') return `<div class="lbl">③ 主整合者</div>${provSelect('lead')}`;
   if (m === 'single') return `<div class="lbl">問哪一家</div>${provSelect('single')}`;
+  if (m === 'quickimg') return `<div class="lbl">頁數</div><div class="chips">${[1, 2].map(n => `<button class="chip ${(+C.qpages || 1) === n ? 'on' : ''}" onclick="C.qpages=${n};refresh()">${n} 頁</button>`).join('')}</div>
+      <div class="hint">流程：三家回答 → <b style="color:${P.openai.color}">ChatGPT</b> 做圖 → <b style="color:${P.anthropic.color}">Claude</b> 檢查。輸入框寫「這張圖要呈現什麼」，例如：一句話結論、四類費用與金額、要追問的 3 個問題、下一步。</div>`;
   if (m === 'transcript') return `<div class="row"><div><div class="lbl">誰整理逐字稿</div>${provSelect('tlead')}</div><div><div class="lbl">逐字稿來源</div><input value="${esc(C.tsrc || '')}" placeholder="例如 Gemini 筆記本" oninput="C.tsrc=this.value"></div></div>
       <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" style="width:auto" ${C.tcheck ? 'checked' : ''} onchange="C.tcheck=this.checked;refresh()"> 三方核對：另外兩家對照逐字稿檢查數字與人名（重要會議用，自動模式多 2～3 次呼叫）</label>
       <div class="lbl">這份整理的用途／重點（選填）</div><input value="${esc(C.tfocus || '')}" placeholder="例如：給 Justice 的產銷會議重點" oninput="C.tfocus=this.value">
@@ -1748,6 +1796,14 @@ function materialsPanel(tp) {
       ${m.images.length ? `<div class="imgs">${m.images.map(u => `<div class="thumb"><img src="${u}" alt="" onclick="zoom(this.src)"></div>`).join('')}</div>` : ''}</div>`).join('')}
   </details>`;
 }
+function carryPrev(tp) { return [...tp.turns].reverse().find(x => okSteps(x).filter(y => y.type === 'answer').length >= 2); }
+function carryBox(tp) {
+  if (C.mode === 'transcript') return '';
+  const prev = carryPrev(tp); if (!prev) return '';
+  const n = turnNo(prev);
+  const label = C.mode === 'quickimg' ? `直接用第 ${n} 問三家的回答（不用再問一次，直接做圖）` : `把第 ${n} 問三家的回答一起附上（讓 AI 參考另外兩家的看法）`;
+  return `<label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" style="width:auto" ${C.carry ? 'checked' : ''} onchange="C.carry=this.checked"> ${label}</label>`;
+}
 function composer(tp) {
   const busy = tp.turns.some(t => RUNNING.has(t.id));
   return `<section class="card composer"><h3>💬 ${tp.turns.length ? '繼續這個主題' : '開始第一問'}</h3>
@@ -1758,7 +1814,7 @@ function composer(tp) {
     <div class="lbl">分析模式</div>
     <div class="chips">${Object.entries(MODES).filter(([, x]) => !x.hidden).map(([k, x]) => `<button class="chip ${C.mode === k ? 'on' : ''}" onclick="C.mode='${k}';refresh()">${x.name}</button>`).join('')}</div>
     <div class="hint">${MODES[C.mode].desc}</div>
-    ${composerCfg()}
+    ${composerCfg()}${carryBox(tp)}
     <div class="lbl">審查模板</div>
     <select onchange="C.template=this.value;refresh()"><option value="">一般（不套用）</option>${(S.templates || []).map(t => `<option value="${t.id}" ${C.template === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
     ${C.template && TPL(C.template) ? `<div class="hint" style="white-space:pre-wrap">${esc(TPL(C.template).focus)}</div>` : ''}
@@ -1820,14 +1876,20 @@ async function ask(tpid) {
   if (C.mode === 'transcript') return askTranscript(tp);
   let judge = C.judge;
   if (C.mode === 'quick' && judge === 'rotate') { judge = PROVS[S.judgeRot % 3]; S.judgeRot++; }
-  const config = { author: C.author, reviewer: C.reviewer, arbiter: C.arbiter || null, rounds: +C.rounds, judge, lead: C.lead, single: C.single || 'anthropic' };
+  const prevT = C.carry ? carryPrev(tp) : null;
+  const config = { author: C.author, reviewer: C.reviewer, arbiter: C.arbiter || null, rounds: +C.rounds, judge, lead: C.lead, single: C.single || 'anthropic', carried: !!(prevT && C.mode === 'quickimg') };
   if (tp.exec !== 'semi' && !keysOK(needProvs(config, C.mode))) return go('settings');
   if (C.images.length) tp.materials.push({ id: uid(), at: Date.now(), text: '', images: [...C.images] });
   const tpl = TPL(C.template);
   const turn = { id: uid(), at: Date.now(), question: q, mode: C.mode, config, exec: tp.exec, steps: [], status: 'running', final: null, pending: [], tplName: tpl ? tpl.name : '', tplFocus: tpl ? tpl.focus : '' };
+  if (C.mode === 'quickimg') turn.imgPages = +C.qpages || 1;
+  if (prevT) {
+    turn.carry = prevT.id;
+    if (C.mode === 'quickimg') PROVS.forEach(p => { const a = okSteps(prevT).filter(x => x.type === 'answer' && x.provider === p).pop(); if (a) turn.steps.push({ id: uid(), type: 'answer', provider: p, text: a.text, status: 'ok', at: Date.now(), manual: true, model: `沿用第 ${turnNo(prevT)} 問`, tin: 0, tout: 0, cost: null, ms: 0 }); });
+  }
   tp.turns.push(turn); reg(tp);
-  S.last = { ...S.last, mode: C.mode, author: C.author, reviewer: C.reviewer, arbiter: C.arbiter, rounds: +C.rounds, judge: C.judge, lead: C.lead, template: C.template, single: C.single }; saveS();
-  C.text = ''; C.images = [];
+  S.last = { ...S.last, mode: C.mode, author: C.author, reviewer: C.reviewer, arbiter: C.arbiter, rounds: +C.rounds, judge: C.judge, lead: C.lead, template: C.template, single: C.single, qpages: +C.qpages || 1 }; saveS();
+  C.text = ''; C.images = []; C.carry = false;
   for (const x of tp.turns) if (x !== turn) OPEN['turn_' + x.id] = false;
   await save(tp); refresh();
   document.getElementById('turn_' + turn.id)?.scrollIntoView();
@@ -1896,7 +1958,7 @@ function rerunPlan(s, st) {
   const intRound = x => s.steps.filter(y => y.type === 'integrate' && y.status === 'ok').indexOf(x) + 1;
   const all = s.steps.filter(x => ok(x) && x.status === 'ok');
   switch (st.type) {
-    case 'answer': return [st, ...all.filter(x => ['refine', 'integrate', 'cross', 'judge'].includes(x.type))];
+    case 'answer': return [st, ...all.filter(x => ['refine', 'integrate', 'cross', 'judge', 'imgdraft'].includes(x.type))];
     case 'refine': { const k = roundOf(st); return [st, ...all.filter(x => (x.type === 'refine' && roundOf(x) > k) || (x.type === 'integrate' && intRound(x) >= k))]; }
     case 'integrate': { const k = intRound(st); return [st, ...all.filter(x => (x.type === 'integrate' && intRound(x) > k) || (x.type === 'refine' && roundOf(x) > k))]; }
     case 'cross': return [st, ...all.filter(x => x.type === 'judge')];
